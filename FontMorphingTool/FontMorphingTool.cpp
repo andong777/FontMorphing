@@ -6,12 +6,12 @@
 #include <stdlib.h>
 #include <vector>
 #include "Constant.h"
-#include "SGCPD.h"
 #include "OriCPD.h"
 #include "Fade_2D.h"
 #include <Eigen/Dense>
 
-#define CPD_FROM_FILE 1
+#define CPD_FROM_FILE
+#define SHOW_DETAILS
 
 using namespace cv;
 using namespace std;
@@ -43,24 +43,20 @@ public:
 ifstream f;
 
 // template data
-Mat templateCharImage;
 int numStroke;
-int templateCharBox[4];
-int (*templateStrokeBox)[4];
 vector<Triangle> connectTri;
-vector<Triangle> templateCharTri;
 vector<Point> templateCharVert;	// subscript from 1
-int* strokeStartAtVertex;	// must be global!
-int numSample;
+int* strokeStartAtVertex;	// must be global!	// todo: use vector instead
+int numSample = 8;
 
-// source data
+// source char
 Mat sourceCharImage;
 int sourceCharBox[4];
 int (*sourceStrokeBox)[4];
 vector<Point> sourceCharVert;	// subscript from 1
 vector<Triangle> sourceCharTri;
 
-// target data
+// target char
 Mat targetCharImage;
 int targetCharBox[4];
 int (*targetStrokeBox)[4];
@@ -68,10 +64,6 @@ vector<Point> targetCharVert;	// subscript from 1
 vector<Triangle> targetCharTri;
 
 void readTemplateCharData(){
-	// show the template character
-	templateCharImage = imread(templateCharPath + "_R.bmp");
-	imshow("template", templateCharImage);
-	waitKey();
 	// read the labels of strokes
 	f.open(templateCharPathPrefix + "\\" + charName + strokeLabelSuffix);
 	if(f){
@@ -82,31 +74,6 @@ void readTemplateCharData(){
 				numStroke++;
 		}
 		cout << "numStroke: " << numStroke << endl;
-		f.close();
-	}
-	// read the coordinates of the bounding box for a character 视图，骨架边界？
-	f.open(templateCharPathPrefix + "\\" + charName + charBoxSuffix);
-	if(f){
-		cout << "char box: " << endl;
-		for(int i=0;i<4;i++){
-			f >> templateCharBox[i];
-			cout << templateCharBox[i] << endl;
-		}
-		f.close();
-	}
-	// read the coordinates of the bounding boxs for all strokes in a given character
-	f.open(templateCharPathPrefix + "\\" + charName + strokeBoxSuffix);
-	templateStrokeBox = new int[numStroke+1][4];
-	if(f){
-		cout << "stroke box: " << endl;
-		for(int i=1;i<=numStroke;i++){
-			cout << "stroke " << i << endl;
-			for(int j=0;j<4;j++){
-				f >> templateStrokeBox[i][j];
-				cout << templateStrokeBox[i][j] << " ";
-			}
-			cout << endl;
-		}
 		f.close();
 	}
 	// read the vertex Number of connection triangles for all strokes in a given character %连接三角形所有顶点数（关键点）
@@ -125,29 +92,11 @@ void readTemplateCharData(){
 		cout << "connectTri num: " << cnt << endl;
 		f.close();
 	}
-	int imgH = templateCharBox[3] - templateCharBox[1] + 10;
-	int imgW = templateCharBox[2] - templateCharBox[0] + 10;
-	Mat imageBlank(imgH, imgW, CV_8UC1, 255.);
-	for(int no=1;no<=numStroke;no++){
-		int offsetX = templateStrokeBox[no][0] - templateCharBox[0] + 5;
-		int offsetY = templateStrokeBox[no][1] - templateCharBox[1] + 5;
-		ostringstream os;
-		os << templateCharPath << "_" << no << ".bmp";
-		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
-		for(int h=0;h<strokeImg.rows;h++){
-			for(int w=0;w<strokeImg.cols;w++){
-				uchar v = strokeImg.at<uchar>(h, w);
-				if(v < 128){
-					imageBlank.at<uchar>(h+offsetY, w+offsetX) = v;
-				}
-			}
-		}
-	}
-	imshow("assembled template", imageBlank); waitKey();
+
 	// read stroke meshes and build the whole mesh for the template
 	int numVex = 0, numTri;
 	strokeStartAtVertex = new int[numStroke + 2]; // starts from 1.
-	strokeStartAtVertex[0] = 1;	// vertex number starts from 1.
+	strokeStartAtVertex[0] = 1;	// vertex number starts from 1. 
 	templateCharVert.push_back(Point(0, 0));	// never access subscript 0.
 	for(int no=1;no<=numStroke;no++){
  		strokeStartAtVertex[no] = strokeStartAtVertex[no-1] + numVex;
@@ -156,7 +105,6 @@ void readTemplateCharData(){
 		f.open(os.str().c_str());
 		if(f){
 			f >> numVex >> numTri >> numSample;	// 每个off文件都存储一个numSample值，看样子可以为不同的笔画指定不同的值，但实际上后来的计算都是用了最后一次循环读出来的numSample。
-			cout << "mesh data " << no << ": " << numVex << " " << numTri << " " << numSample << endl;
 			for(int i=1;i<=numVex;i++){
 				int x, y;
 				f >> x >> y;
@@ -164,35 +112,10 @@ void readTemplateCharData(){
 				templateCharVert.push_back(v);
 			}
 			int offset = strokeStartAtVertex[no] - 1;
-			for(int i=1;i<=numTri;i++){
-				int a, b, c;
-				f >> a >> b >> c;
-				Triangle t(a+offset, b+offset, c+offset);
-				templateCharTri.push_back(t);
-			}
 			f.close();
 		}
 	}
 	strokeStartAtVertex[numStroke+1] = strokeStartAtVertex[numStroke] + numVex;	// 这样我们不需要记录笔画到哪个点结束，只要找下个点开始的位置-1即可。
-	cout<<"!";	for(int i=0;i<numStroke+2;i++)	cout << strokeStartAtVertex[i] << " ";
-	Mat rgb;
-	cvtColor(imageBlank, rgb, CV_GRAY2BGR);
-	line(rgb, Point(0, 0), Point(20, 40), Scalar(0, 0, 255), 5);
-	line(rgb, Point(20, 40), Point(40, 20), Scalar(0, 255, 0), 5);
-	line(rgb, Point(40, 20), Point(0, 0), Scalar(255, 0, 0), 5);
-
-	templateCharTri.insert(templateCharTri.end(), connectTri.begin(), connectTri.end());
-	for(vector<Triangle>::iterator it=templateCharTri.begin();it!=templateCharTri.end();it++){
-		int a = (*it).va;	// because vertex starts from 1.
-		int b = (*it).vb;
-		int c = (*it).vc;
-		line(rgb, templateCharVert[a], templateCharVert[b], Scalar(255, 0, 0));
-		line(rgb, templateCharVert[b], templateCharVert[c], Scalar(255, 0, 0));
-		line(rgb, templateCharVert[c], templateCharVert[a], Scalar(255, 0, 0));
-	}
-	cout << endl << "There are " << templateCharVert.size() << " points in template character." << endl;
-	cout << endl << "There are " << templateCharTri.size() << " triangles in template character." << endl;
-	imshow("template mesh", rgb); waitKey();
 }
 
 void readSourceCharData(){
@@ -299,8 +222,7 @@ void registerSourceChar(){
 			}
 		}
 
-		//cout<<strokeStartAtVertex[no]<<"~"<<strokeStartAtVertex[no+1]-1<<endl;
-#if CPD_FROM_FILE
+#ifdef CPD_FROM_FILE
 		ostringstream oss;
 		oss << "Source_Y_" << no << ".txt";
 		ifstream inf(oss.str(), ios::in);
@@ -631,8 +553,7 @@ void registerTargetChar(){
 			}
 		}
 
-		//cout<<strokeStartAtVertex[no]<<"~"<<strokeStartAtVertex[no+1]-1<<endl;
-#if CPD_FROM_FILE
+#ifdef CPD_FROM_FILE
 		ostringstream oss;
 		oss << "Target_Y_" << no << ".txt";
 		ifstream inf(oss.str(), ios::in);
@@ -916,51 +837,8 @@ void registerTargetChar(){
 
 void doMorphing(int numStep){
 	int posFixed = 10;
-	vector<Triangle> &tri = templateCharTri;
-	//vector<Triangle> &tri = sourceCharTri;
-	//vector<Triangle> &tri = targetCharTri;
+	vector<Triangle> &tri = sourceCharTri;
 	int numTri = tri.size(), numVert = templateCharVert.size() - 1;
-
-	/*ofstream outf("sourceCharVert.txt", ios::out);
-	for (int j = 0; j <= numVert; j++){
-		outf << sourceCharVert[j].x << " " << sourceCharVert[j].y << endl;
-	}
-	outf.close();
-	outf.open("targetCharVert.txt", ios::out);
-	for (int j = 0; j <= numVert; j++){
-		outf << targetCharVert[j].x << " " << targetCharVert[j].y << endl;
-	}
-	outf.close();*/
-	//Mat tmp(500, 500, CV_8UC3, Scalar(255, 255, 255));
-	//for (int i = 0; i <= numVert; i++){
-	//	//circle(tmp, sourceCharVert[i], 2, Scalar(0, 255, 0));
-	//	circle(tmp, targetCharVert[i], 2, Scalar(0, 255, 0));
-	//}
-	//imshow("test", tmp); waitKey();
-
-	//ifstream inf("sourceCharVert.txt", ios::in);
-	//for (int j = 0; j <= numVert; j++){
-	//	double x, y;
-	//	inf >> x >> y;
-	//	sourceCharVert[j].x = x;
-	//	sourceCharVert[j].y = y;
-	//}
-	//inf.close();
-	//inf.open("targetCharVert.txt", ios::in);
-	//for (int j = 0; j <= numVert; j++){
-	//	double x, y;
-	//	inf >> x >> y;
-	//	targetCharVert[j].x = x;
-	//	targetCharVert[j].y = y;
-	//}
-	//inf.close();
-	//Mat tmp2(500, 500, CV_8UC3, Scalar(255, 255, 255));
-	//for (int i = 0; i <= numVert; i++){
-	//	//circle(tmp, sourceCharVert[i], 2, Scalar(0, 0, 255));
-	//	circle(tmp2, targetCharVert[i], 2, Scalar(0, 0, 255));
-	//}
-	//imshow("test2", tmp2); waitKey();
-
 	Point *sv = new Point[numVert + 1];
 	Point *tv = new Point[numVert + 1];
 	for (int i = 0; i <= numVert; i++){
@@ -1055,8 +933,8 @@ void doMorphing(int numStep){
 			tempVert[j] = Point(x, y);
 		}
 		for (int j = 1; j <= numVert; j++){
-			tempVert[j].x += sourceCharVert[posFixed].x + 40;
-			tempVert[j].y += sourceCharVert[posFixed].y + 30;
+			tempVert[j].x += sourceCharVert[posFixed].x + 20;
+			tempVert[j].y += sourceCharVert[posFixed].y + 20;
 		}
 
 		/*ostringstream osss;
@@ -1077,22 +955,25 @@ void doMorphing(int numStep){
 		}
 		inf.close();*/
 
-		int imgH = templateCharBox[3] - templateCharBox[1] + 10;
-		int imgW = templateCharBox[2] - templateCharBox[0] + 10;
-		Mat image(floor(1.4f*imgH) + 30, floor(1.3f*imgW) + 30, CV_8UC1, Scalar(255));
+		int imgH = sourceCharBox[3] - sourceCharBox[1] + 10;
+		int imgW = sourceCharBox[2] - sourceCharBox[0] + 10;
+		Mat image(floor(1.f*imgH) + 30, floor(1.f*imgW) + 30, CV_8UC1, Scalar(255));
 		for (int i = 0; i < numTri/* - connectTri.size()*/; i++){
+#ifdef SHOW_DETAILS
 			int a = tri[i].va;
 			int b = tri[i].vb;
 			int c = tri[i].vc;
 			line(image, tempVert[a], tempVert[b], Scalar(0));
 			line(image, tempVert[b], tempVert[c], Scalar(0));
 			line(image, tempVert[c], tempVert[a], Scalar(0));
-			/*Point gon[1][3];
+#else
+			Point gon[1][3];
 			gon[0][0] = tempVert[tri[i].va];
 			gon[0][1] = tempVert[tri[i].vb];
 			gon[0][2] = tempVert[tri[i].vc];
 			const Point* ppt[1] = { gon[0] }; int npt[] = { 3 };
-			fillPoly(image, ppt, npt, 1, Scalar(0, 0, 0));*/
+			fillPoly(image, ppt, npt, 1, Scalar(0, 0, 0));
+#endif
 		}
 		delete tempVert;
 		imshow("morphing", image); waitKey();
