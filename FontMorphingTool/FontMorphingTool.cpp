@@ -43,25 +43,24 @@ public:
 ifstream f;
 
 // template data
+int numSample = 8;
 int numStroke;
 vector<Triangle> connectTri;
+vector<Triangle> triMesh;
 vector<Point> templateCharVert;	// subscript from 1
 int* strokeStartAtVertex;	// must be global!	// todo: use vector instead
-int numSample = 8;
 
 // source char
 Mat sourceCharImage;
 int sourceCharBox[4];
 int (*sourceStrokeBox)[4];
 vector<Point> sourceCharVert;	// subscript from 1
-vector<Triangle> sourceCharTri;
 
 // target char
 Mat targetCharImage;
 int targetCharBox[4];
 int (*targetStrokeBox)[4];
 vector<Point> targetCharVert;	// subscript from 1
-vector<Triangle> targetCharTri;
 
 void readTemplateCharData(){
 	// read the labels of strokes
@@ -111,7 +110,6 @@ void readTemplateCharData(){
 				Point v(x, y);
 				templateCharVert.push_back(v);
 			}
-			int offset = strokeStartAtVertex[no] - 1;
 			f.close();
 		}
 	}
@@ -299,7 +297,7 @@ void registerSourceChar(){
 			}
 		}
 		vector<Point> corners;
-		goodFeaturesToTrack(edge, corners, 20, .05, 20, Mat(), 5, true, .1);
+		goodFeaturesToTrack(edge, corners, 20, .05, 20, Mat(), 5, true, .1);	// todo: need to be improved
 		cout << corners.size() << " corner points." << endl;
 		for(int i=0;i<corners.size();i++){
 			cornerFlag[corners[i].y][corners[i].x] = true;
@@ -362,10 +360,11 @@ void registerSourceChar(){
 				}
 				currentX += deltaAngle[direct][0];
 				currentY += deltaAngle[direct][1];
-			}else{
+			}else{	// 没找到后续点，多边形的构建结束
 				cout << "find no next points" << endl;
 			}
 		}
+
 		vector<Point> samplePoints;	// 采样后得到的点
 		for(int i=0;i<keyPoints.size();i++){
 			int i2 = (i + 1) % keyPoints.size();	// 下一个关键点
@@ -411,7 +410,7 @@ void registerSourceChar(){
 					int index = floor(fmod(kp1Order + numIntervalPoints*j + polygon.size(), polygon.size())); // notice the detail
 					samplePoints.push_back(polygon[(index-1+polygon.size())%polygon.size()]);
 					// replace regular sample points by the corner points
-					int numSampleSub = 2 * floor(abs(numIntervalPoints)) - 1;
+					int numSampleSub = 2 * floor(abs(numIntervalPoints)) - 1;	// 从startPos到endPos恰好有2num-1个点 4.7
 					for(int p=1;p<=numSampleSub;p++){
 						index = floor(fmod(kp1Order + numIntervalPoints*(j - 1) + p*step + polygon.size(), polygon.size()));
 						Point pnt = polygon[(index - 1 + polygon.size()) % polygon.size()];
@@ -472,7 +471,7 @@ void registerSourceChar(){
 				}
 			}
 			Triangle tri(v[0], v[1], v[2]);
-			sourceCharTri.push_back(tri);
+			triMesh.push_back(tri);
 			for (int i = 0; i < 3; i++){
 				line(rgb, p[i], p[(i + 1) % 3], Scalar(255, 0, 0));
 			}
@@ -497,9 +496,9 @@ void registerSourceChar(){
 		line(rgb, sourceCharVert[c], sourceCharVert[a], Scalar(255, 0, 0));
 	}
 	imshow("source", rgb); waitKey();
-	sourceCharTri.insert(sourceCharTri.end(), connectTri.begin(), connectTri.end());
+	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
-	cout << endl << "There are " << sourceCharTri.size() << " triangles in source character." << endl;
+	cout << endl << "There are " << triMesh.size() << " triangles in source character." << endl;
 }
 
 void registerTargetChar(){
@@ -567,7 +566,7 @@ void registerTargetChar(){
 		inf.close();
 #else
 		for (int i = strokeStartAtVertex[no]; i<strokeStartAtVertex[no + 1] - 1; i++){
-			CPointDouble cpdp = CVPointToSGCPDPoint(templateCharVert[i]);
+			CPointDouble cpdp = CVPointToSGCPDPoint(sourceCharVert[i]);
 			Y.push_back(cpdp);
 			S.push_back(no);	// or any other constant
 		}
@@ -768,48 +767,6 @@ void registerTargetChar(){
 			p->y += offsetY;
 			circle(rgb, *p, 2, Scalar(0, 0, 0), CV_FILLED);
 		}
-		imshow("target", rgb); waitKey();
-
-		// Triangulation
-		vector<Point2> inputPoints;
-		for (vector<Point>::iterator it = samplePoints.begin(); it != samplePoints.end(); it++){
-			inputPoints.push_back(CVPointToFade2DPoint(*it));
-		}
-		Fade_2D dt;
-		dt.insert(inputPoints);
-		vector<Segment2> segments;
-		for (int i = 0; i < inputPoints.size(); i++){
-			Segment2 seg(inputPoints[i], inputPoints[(i + 1) % inputPoints.size()]);
-			segments.push_back(seg);
-		}
-		ConstraintGraph2* constraint = dt.createConstraint(segments, CIS_KEEP_DELAUNAY);
-		Zone2* zone = dt.createZone(constraint, ZL_INSIDE);
-		dt.applyConstraintsAndZones();
-		vector<Triangle2*> outputTriangles;
-		zone->getTriangles(outputTriangles);
-		
-		// 更新变量，释放内存等
-		for (vector<Triangle2*>::iterator it = outputTriangles.begin(); it != outputTriangles.end(); it++){
-			Point p[3];
-			int v[3];
-			for (int i = 0; i < 3; i++){
-				p[i] = Fade2DPointToCVPoint(*(**it).getCorner(i));
-				vector<Point>::iterator pos = std::find(samplePoints.begin(), samplePoints.end(), p[i]);
-				if (pos != samplePoints.end()){
-					v[i] = pos - samplePoints.begin() + 1;
-					v[i] += targetCharVert.size() - 1;
-				}
-				else{
-					v[i] = -1;
-					cout << "find triangle index failed." << endl;
-				}
-			}
-			Triangle tri(v[0], v[1], v[2]);
-			targetCharTri.push_back(tri);
-			for (int i = 0; i < 3; i++){
-				line(rgb, p[i], p[(i + 1) % 3], Scalar(255, 0, 0));
-			}
-		}
 		targetCharVert.insert(targetCharVert.end(), samplePoints.begin(), samplePoints.end());
 		imshow("target", rgb); waitKey();
 
@@ -821,24 +778,12 @@ void registerTargetChar(){
 		delete[] cornerFlag;
 		delete[] orderAtThisPoint;
 	}
-	for (vector<Triangle>::iterator it = connectTri.begin(); it != connectTri.end(); it++){
-		int a = (*it).va;	// because vertex starts from 1.
-		int b = (*it).vb;
-		int c = (*it).vc;
-		line(rgb, targetCharVert[a], targetCharVert[b], Scalar(255, 0, 0));
-		line(rgb, targetCharVert[b], targetCharVert[c], Scalar(255, 0, 0));
-		line(rgb, targetCharVert[c], targetCharVert[a], Scalar(255, 0, 0));
-	}
-	imshow("target", rgb); waitKey();
-	targetCharTri.insert(targetCharTri.end(), connectTri.begin(), connectTri.end());
-	cout << endl << "There are " << targetCharVert.size() << " points in target character." << endl;
-	cout << endl << "There are " << targetCharTri.size() << " triangles in target character." << endl;
 }
 
 void doMorphing(int numStep){
 	int posFixed = 10;
-	vector<Triangle> &tri = sourceCharTri;
-	int numTri = tri.size(), numVert = templateCharVert.size() - 1;
+	vector<Triangle> &tri = triMesh;
+	int numTri = tri.size(), numVert = sourceCharVert.size() - 1;
 	Point *sv = new Point[numVert + 1];
 	Point *tv = new Point[numVert + 1];
 	for (int i = 0; i <= numVert; i++){
@@ -978,6 +923,7 @@ void doMorphing(int numStep){
 		delete tempVert;
 		imshow("morphing", image); waitKey();
 		ostringstream oss;
+
 		oss << charName << "_" << i << ".jpg";
 		imwrite(oss.str(), image);
 	}
