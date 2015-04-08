@@ -10,7 +10,7 @@
 #include "Fade_2D.h"
 #include <Eigen/Dense>
 
-#define CPD_FROM_FILE
+//#define CPD_FROM_FILE
 #define SHOW_DETAILS
 
 using namespace cv;
@@ -207,107 +207,6 @@ void registerSourceChar(){
 		Mat edge;	// 边缘检测得到的矩阵，边缘为白色。
 		Canny(filled, edge, 40, 120);	// Canny方法输出灰度矩阵
 
-		// CPD registration
-		vector<CPointDouble> X;
-		vector<CPointDouble> Y;
-		vector<int> S;
-		for(int i=0;i<edge.rows;i++){
-			for(int j=0;j<edge.cols;j++){
-				if(edge.at<uchar>(i, j) > 128){
-					CPointDouble cpdp(j+offsetX, i+offsetY);
-					X.push_back(cpdp); 
-				}
-			}
-		}
-
-#ifdef CPD_FROM_FILE
-		ostringstream oss;
-		oss << "Source_Y_" << no << ".txt";
-		ifstream inf(oss.str(), ios::in);
-		int Y_size;
-		inf >> Y_size;
-		for(int i=0;i<Y_size;i++){
-			double x, y;
-			inf >> x >> y;
-			Y.push_back(CPointDouble(x, y));
-		}
-		inf.close();
-#else
-		for (int i = strokeStartAtVertex[no]; i<strokeStartAtVertex[no + 1] - 1; i++){
-			CPointDouble cpdp = CVPointToSGCPDPoint(templateCharVert[i]);
-			Y.push_back(cpdp);
-			S.push_back(no);	// or any other constant
-		}
-		CPD *cpd = new ::SGCPD::OriCPD();
-		cpd->SetData(X, Y, S);
-		cpd->NormalizeInput();
-		cpd->CPDRegister(2, 25, 2, 8, 1e-10, 0.7, 0);
-		cpd->DenormalizeOutput();
-		vector< vector<CPointDouble> > result = cpd->GetDecompositionResult();
-		Y = cpd->GetTemplatePoints();
-		delete cpd;
-		ostringstream oss;
-		oss << "Source_Y_" << no << ".txt";
-		ofstream outf(oss.str(), ios::out);
-		outf << Y.size() << endl;
-		for(int i=0;i<Y.size();i++){
-			outf << Y[i].x << " " << Y[i].y << endl;
-		}
-		outf.close();
-#endif
-
-		for(int i=0;i<Y.size();i++){
-			circle(rgb, SGCPDPointToCVPoint(Y[i]), 5, Scalar(0, 255, 0));
-		}
-
-		// find key points on the contour
-		vector<Point> keyPoints;
-		int *vertexBelongToTemplate = new int[X.size()];
-		for(int i=0;i<X.size();i++)	vertexBelongToTemplate[i] = -1;
-		for(int i=0;i<Y.size();i+=numSample){
-			int minDist = infinity, dist, index;
-			for(int j=0;j<X.size();j++){
-				if(vertexBelongToTemplate[j] < 0){	// 尚未确定该点的对应关系
-					dist = (X[j].x-Y[i].x)*(X[j].x-Y[i].x)+(X[j].y-Y[i].y)*(X[j].y-Y[i].y);
-					if(dist < minDist){
-						minDist = dist;
-						index = j;
-					}
-				}
-			}
-			vertexBelongToTemplate[index] = i;
-			Point p(X[index].x, X[index].y);
-			keyPoints.push_back(p);
-		}
-		cout << keyPoints.size() << " key points." << endl;
-		for (vector<Point>::iterator it = keyPoints.begin(); it != keyPoints.end(); it++){
-			cout << "(" << (*it).x << ", " << (*it).y << ") ";
-			circle(rgb, *it, 5, Scalar(0, 0, 255));
-		}
-		cout << endl;
-
-		// find corner points on the contour
-		bool **cornerFlag = new bool*[edge.size().height];
-		for(int i=0;i<edge.size().height;i++){
-			cornerFlag[i] = new bool[edge.size().width];
-		}
-		for(int i=0;i<edge.size().height;i++){
-			for(int j=0;j<edge.size().width;j++){
-				cornerFlag[i][j] = false;
-			}
-		}
-		vector<Point> corners;
-		goodFeaturesToTrack(edge, corners, 20, .05, 20, Mat(), 5, true, .1);	// todo: need to be improved
-		cout << corners.size() << " corner points." << endl;
-		for(int i=0;i<corners.size();i++){
-			cornerFlag[corners[i].y][corners[i].x] = true;
-			corners[i].x += offsetX;
-			corners[i].y += offsetY;
-			cout << "(" << corners[i].x << ", " << corners[i].y << ") ";
-			circle(rgb, corners[i], 5, Scalar(255, 0, 0));
-		}
-		imshow("source", rgb); waitKey();
-
 		// contour line connection method
 		vector<Point> polygon;	//记录多边形上的点
 		int **orderAtThisPoint = new int*[edge.size().height];	// 记录点在多边形上的顺序，从1开始
@@ -319,12 +218,42 @@ void registerSourceChar(){
 				orderAtThisPoint[i][j] = 0;
 			}
 		}
-		for(int i=0;i<keyPoints.size();i++){	// char image -> large stroke image
-			keyPoints[i].x -= offsetX;
-			keyPoints[i].y -= offsetY;
+
+		int currentX = -1, currentY = -1;
+		bool found = false;
+		for (int i = 0; i < edge.cols; i++){
+			for (int j = 0; j < edge.rows; j++){
+				if (edge.at<uchar>(j, i) > 128){
+					int firstStepCnt = 0, maxSecondStepCnt = 0;
+					for (int i = 0; i < 8; i++){
+						int tempX = i + deltaAngle[i][0];
+						int tempY = j + deltaAngle[i][1];
+						if (edge.at<uchar>(tempY, tempX) > 128){
+							firstStepCnt++;
+							int secondStepCnt = 0;
+							for (int j = 0; j<8; j++){
+								int tempXX = tempX + deltaAngle[j][0];
+								int tempYY = tempY + deltaAngle[j][1];
+								if (edge.at<uchar>(tempYY, tempXX) > 128){
+									secondStepCnt++;
+								}
+							}
+							if (secondStepCnt > maxSecondStepCnt)	maxSecondStepCnt = secondStepCnt;
+						}
+					}
+					if (firstStepCnt >= 1 && maxSecondStepCnt >= 1){
+						currentX = i; currentY = j;
+						found = true;
+						break;
+					}
+				}
+			}
+			if (found)	break;
 		}
-		int currentX = keyPoints[0].x;
-		int currentY = keyPoints[0].y;
+		/*circle(rgb, Point(currentX+offsetX, currentY+offsetY), 2, Scalar(0, 0, 255), CV_FILLED);
+		cout << "current: (" << currentX+offsetX << ", " << currentY+offsetY << ")" << endl;
+		imshow("", rgb); waitKey();*/
+
 		while(edge.at<uchar>(currentY, currentX) > 128){
 			polygon.push_back(Point(currentX, currentY));
 			orderAtThisPoint[currentY][currentX] = polygon.size();
@@ -364,68 +293,28 @@ void registerSourceChar(){
 				cout << "find no next points" << endl;
 			}
 		}
+		/*for (int i = 0; i<polygon.size(); i++){
+			Point *p = &polygon[i];
+			p->x += offsetX;
+			p->y += offsetY;
+			circle(rgb, *p, 1, Scalar(0, 0, 0), CV_FILLED);
+		}
+		imshow("", rgb); waitKey();*/
 
+		double sampleInterval = 100.;	// 每两个关键点间的大致距离
+		int numKeyPoints = floor(polygon.size() / sampleInterval);	// 根据上面距离，求出关键点个数，即采样段的个数
+		double extraInterval = polygon.size() - sampleInterval * numKeyPoints;	// 划分后多余的长度，被均分到每个采样段中
+		sampleInterval += extraInterval / numKeyPoints;
+		double sampleStep = sampleInterval / numSample;	// 每个采样段中，两个普通点之间的距离
 		vector<Point> samplePoints;	// 采样后得到的点
-		for(int i=0;i<keyPoints.size();i++){
-			int i2 = (i + 1) % keyPoints.size();	// 下一个关键点
-			samplePoints.push_back(keyPoints[i]);
-			int kp1Order = orderAtThisPoint[keyPoints[i].y][keyPoints[i].x];
-			int kp2Order = orderAtThisPoint[keyPoints[i2].y][keyPoints[i2].x];
-			if(kp1Order <= 0 || kp2Order <= 0){
-				cout << "some key points are off the polygon." << endl;
-				break;
-			}
-			int dist = abs(kp1Order - kp2Order);
-			if((polygon.size() - dist) >= dist){	// 小圈
-				double numIntervalPoints = double(dist) / numSample;	// 中间插点的间隔
-				if (kp1Order > kp2Order)	numIntervalPoints *= -1;
-				for(int j=1;j<numSample;j++){
-					int index = floor(kp1Order + numIntervalPoints * j);
-					samplePoints.push_back(polygon[index-1]);	// 因为order是从1开始，所以取下标要减1.
-					// replace regular sample points by the corner points
-					int startPos, endPos;	// to let startPos < endPos
-					if(kp1Order < kp2Order){	// 点1 -> 点2
-						startPos = floor(kp1Order + numIntervalPoints * (j - 1) + 1);	// notice the number '1', 
-						endPos = floor(kp1Order + numIntervalPoints * (j + 1) - 1);	// which means it's an exclusive interval. 3.28
-					}else{	// 点2 -> 点1
-						startPos = floor(kp1Order + numIntervalPoints * (j + 1) + 1);
-						endPos = floor(kp1Order + numIntervalPoints * (j - 1) - 1);
-					}
-					for(int p=startPos;p<=endPos;p++){
-						Point pnt = polygon[p - 1];	// 同上
-						if(cornerFlag[pnt.y][pnt.x]){
-							cout << "小圈 replace corner ("<<pnt.x+offsetX<<", "<<pnt.y+offsetY<<")"<<endl;
-							cornerFlag[pnt.y][pnt.x] = false;
-							samplePoints.pop_back();
-							samplePoints.push_back(pnt);
-							break;
-						}
-					}
-				}
-			}else{	// 大圈
-				double numIntervalPoints = double(polygon.size() - dist) / numSample;
-				if(kp1Order < kp2Order)	numIntervalPoints *= -1;	// 注意这里是小于而不是大于
-				int step = numIntervalPoints / abs(numIntervalPoints);	// +1 or -1
-				for(int j=1;j<numSample;j++){
-					int index = floor(fmod(kp1Order + numIntervalPoints*j + polygon.size(), polygon.size())); // notice the detail
-					samplePoints.push_back(polygon[(index-1+polygon.size())%polygon.size()]);
-					// replace regular sample points by the corner points
-					int numSampleSub = 2 * floor(abs(numIntervalPoints)) - 1;	// 从startPos到endPos恰好有2num-1个点 4.7
-					for(int p=1;p<=numSampleSub;p++){
-						index = floor(fmod(kp1Order + numIntervalPoints*(j - 1) + p*step + polygon.size(), polygon.size()));
-						Point pnt = polygon[(index - 1 + polygon.size()) % polygon.size()];
-						if(cornerFlag[pnt.y][pnt.x]){
-							cout << "大圈 replace corner ("<<pnt.x+offsetX<<", "<<pnt.y+offsetY<<")"<<endl;
-							cornerFlag[pnt.y][pnt.x] = false;
-							samplePoints.pop_back();
-							samplePoints.push_back(pnt);
-							break;
-						}
-					}
-				}
+		int numInterval = sampleInterval / numSample;
+		for (int i = 0; i < numKeyPoints; i++){
+			int basePosition = sampleInterval * i;
+			for (int j = 0; j < numSample; j++){
+				int pointIndex = basePosition + sampleStep * j;
+				samplePoints.push_back(polygon[pointIndex]);
 			}
 		}
-
 		// Plot the polygon
 		cout << samplePoints.size() << " sample points." << endl;
 		for(int i=0;i<samplePoints.size();i++){
@@ -434,7 +323,9 @@ void registerSourceChar(){
 			p->y += offsetY;
 			circle(rgb, *p, 2, Scalar(0, 0, 0), CV_FILLED);
 		}
-		imshow("source", rgb); waitKey();
+		for (int i = 0; i < samplePoints.size();i+=numSample){
+			circle(rgb, samplePoints[i], 5, Scalar(0, 0, 255));
+		}
 		
 		// Triangulation
 		vector<Point2> inputPoints;
@@ -479,14 +370,11 @@ void registerSourceChar(){
 		sourceCharVert.insert(sourceCharVert.end(), samplePoints.begin(), samplePoints.end());
 		imshow("source", rgb); waitKey();
 
-		delete[] vertexBelongToTemplate;
 		for(int i=0;i<edge.size().height;i++){
-			delete[] cornerFlag[i];
 			delete[] orderAtThisPoint[i];
 		}
-		delete[] cornerFlag;
 		delete[] orderAtThisPoint;
- 	}
+ 	} // end of for stroke
 	for (vector<Triangle>::iterator it = connectTri.begin(); it != connectTri.end(); it++){
 		int a = (*it).va;	// because vertex starts from 1.
 		int b = (*it).vb;
@@ -538,7 +426,7 @@ void registerTargetChar(){
 		Mat filled = fillHoles(largerStrokeImg);
 		Mat edge;	// 边缘检测得到的矩阵，边缘为白色。
 		Canny(filled, edge, 40, 120);	// Canny方法输出灰度矩阵
-		//imshow("", edge); waitKey();
+
 		// CPD registration
 		vector<CPointDouble> X;
 		vector<CPointDouble> Y;
