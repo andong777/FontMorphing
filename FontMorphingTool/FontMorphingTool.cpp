@@ -65,7 +65,7 @@ int targetCharBox[4];
 int (*targetStrokeBox)[4];
 vector<Point> targetCharVert;	// subscript from 1
 
-void readTemplateCharData(){
+void readCharactersData(){
 	// read the labels of strokes
 	f.open(templateCharPathPrefix + "\\" + charName + strokeLabelSuffix);
 	if(f){
@@ -117,16 +117,14 @@ void readTemplateCharData(){
 		}
 	}
 	strokeStartAtVertex[numStroke+1] = strokeStartAtVertex[numStroke] + numVex;	// 这样我们不需要记录笔画到哪个点结束，只要找下个点开始的位置-1即可。
-}
 
-void readSourceCharData(){
 	// show the character 1
 	sourceCharImage = imread(sourceCharPath + "_R.bmp");
 	imshow("source", sourceCharImage); waitKey();
 	// read the coordinates of the bounding box for a character 视图，骨架边界？
 	f.open(sourceCharPath + charBoxSuffix);
-	if(f){
-		for(int i=0;i<4;i++){
+	if (f){
+		for (int i = 0; i<4; i++){
 			f >> sourceCharBox[i];
 			cout << sourceCharBox[i] << endl;
 		}
@@ -134,25 +132,23 @@ void readSourceCharData(){
 	}
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(sourceCharPath + strokeBoxSuffix);
-	sourceStrokeBox = new int[numStroke+1][4];
-	if(f){
-		for(int i=1;i<=numStroke;i++){
-			for(int j=0;j<4;j++){
+	sourceStrokeBox = new int[numStroke + 1][4];
+	if (f){
+		for (int i = 1; i <= numStroke; i++){
+			for (int j = 0; j<4; j++){
 				f >> sourceStrokeBox[i][j];
 			}
 		}
 		f.close();
 	}
-}
 
-void readTargetCharData(){
 	// show the character 2
 	targetCharImage = imread(targetCharPath + "_R.bmp");
 	imshow("target", targetCharImage); waitKey();
 	// read the coordinates of the bounding box for a character 视图，骨架边界？
 	f.open(targetCharPath + charBoxSuffix);
-	if(f){
-		for(int i=0;i<4;i++){
+	if (f){
+		for (int i = 0; i<4; i++){
 			f >> targetCharBox[i];
 			cout << targetCharBox[i] << endl;
 		}
@@ -160,10 +156,10 @@ void readTargetCharData(){
 	}
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(targetCharPath + strokeBoxSuffix);
-	targetStrokeBox = new int[numStroke+1][4];
-	if(f){
-		for(int i=1;i<=numStroke;i++){
-			for(int j=0;j<4;j++){
+	targetStrokeBox = new int[numStroke + 1][4];
+	if (f){
+		for (int i = 1; i <= numStroke; i++){
+			for (int j = 0; j<4; j++){
 				f >> targetStrokeBox[i][j];
 			}
 		}
@@ -171,7 +167,7 @@ void readTargetCharData(){
 	}
 }
 
-void registerSourceChar(){
+void getTemplateFromSourceCharacter(){
 	// generate the source character by assembling its strokes
 	int imgH = sourceCharBox[3] - sourceCharBox[1] + 10;
 	int imgW = sourceCharBox[2] - sourceCharBox[0] + 10;
@@ -318,7 +314,7 @@ void registerSourceChar(){
 	cout << endl << "There are " << triMesh.size() << " triangles in source character." << endl;
 }
 
-void registerTargetChar(){
+void registerPointSetToTargetCharacter(){
 	// generate the target character by assembling its strokes
 	int imgH = targetCharBox[3] - targetCharBox[1] + 10;
 	int imgW = targetCharBox[2] - targetCharBox[0] + 10;
@@ -622,24 +618,6 @@ void doMorphing(int numStep){
 			tempVert[j].y += sourceCharVert[posFixed].y + 20;
 		}
 
-		/*ostringstream osss;
-		osss << "TempVert_step_" << i << ".txt";*/
-
-		/*ofstream outf(osss.str(), ios::out);
-		for (int j = 1; j<=numVert; j++){
-			outf << tempVert[j].x << " " << tempVert[j].y << endl;
-		}
-		outf.close();*/
-
-		/*ifstream inf(osss.str(), ios::in);
-		for (int j = 1; j<=numVert; j++){
-			double x, y;
-			inf >> x >> y;
-			tempVert[j].x = x;
-			tempVert[j].y = y;
-		}
-		inf.close();*/
-
 		int imgH = sourceCharBox[3] - sourceCharBox[1] + 10;
 		int imgW = sourceCharBox[2] - sourceCharBox[0] + 10;
 		Mat image(floor(1.f*imgH) + 30, floor(1.f*imgW) + 30, CV_8UC1, Scalar(255));
@@ -672,11 +650,9 @@ void doMorphing(int numStep){
 
 int main( int, char** argv )
 {
-	readTemplateCharData();
-	readSourceCharData();
-	readTargetCharData();
-	registerSourceChar();
-	registerTargetChar();
+	readCharactersData();
+	getTemplateFromSourceCharacter();
+	registerPointSetToTargetCharacter();
 	do{
 		doMorphing(20);
 	} while (1);
