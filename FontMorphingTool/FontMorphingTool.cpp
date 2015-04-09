@@ -621,6 +621,9 @@ void doMorphing(int numStep){
 		int imgH = sourceCharBox[3] - sourceCharBox[1] + 10;
 		int imgW = sourceCharBox[2] - sourceCharBox[0] + 10;
 		Mat image(floor(1.f*imgH) + 30, floor(1.f*imgW) + 30, CV_8UC1, Scalar(255));
+		ostringstream osss;
+		osss << "step: " << i << " / " << numStep;
+		putText(image, osss.str(), Point(250, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 255));
 		for (int i = 0; i < numTri/* - connectTri.size()*/; i++){
 #ifdef SHOW_DETAILS
 			int a = tri[i].va;
@@ -717,15 +720,15 @@ Point findStartPoint(const Mat& mat){
 		for (int j = 0; j < mat.rows; j++){
 			if (mat.at<uchar>(j, i) > 128){
 				int firstStepCnt = 0, maxSecondStepCnt = 0;
-				for (int d = 0; d < 8; d++){
-					int tempX = i + deltaAngle[d][0];
-					int tempY = j + deltaAngle[d][1];
+				for (int i = 0; i < 8; i++){	// todo: 注意！这里和后面使用i，j是错误的。这里使用它是因为连接三角形还没有实现自动获得。
+					int tempX = i + deltaAngle[i][0];
+					int tempY = j + deltaAngle[i][1];
 					if (mat.at<uchar>(tempY, tempX) > 128){
 						firstStepCnt++;
 						int secondStepCnt = 0;
-						for (int dd = 0; dd<8; dd++){
-							int tempXX = tempX + deltaAngle[dd][0];
-							int tempYY = tempY + deltaAngle[dd][1];
+						for (int j = 0; j<8; j++){
+							int tempXX = tempX + deltaAngle[j][0];
+							int tempYY = tempY + deltaAngle[j][1];
 							if (mat.at<uchar>(tempYY, tempXX) > 128){
 								secondStepCnt++;
 							}
