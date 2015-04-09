@@ -10,7 +10,7 @@
 #include "Fade_2D.h"
 #include <Eigen/Dense>
 
-//#define CPD_FROM_FILE
+#define CPD_FROM_FILE
 #define SHOW_DETAILS
 
 using namespace cv;
@@ -207,6 +207,27 @@ void registerSourceChar(){
 		Mat edge;	// 边缘检测得到的矩阵，边缘为白色。
 		Canny(filled, edge, 40, 120);	// Canny方法输出灰度矩阵
 
+		// find corner points on the contour
+		bool **cornerFlag = new bool*[edge.size().height];
+		for (int i = 0; i<edge.size().height; i++){
+			cornerFlag[i] = new bool[edge.size().width];
+		}
+		for (int i = 0; i<edge.size().height; i++){
+			for (int j = 0; j<edge.size().width; j++){
+				cornerFlag[i][j] = false;
+			}
+		}
+		vector<Point> corners;
+		goodFeaturesToTrack(edge, corners, 20, .05, 20, Mat(), 5, true, .1);
+		cout << corners.size() << " corner points." << endl;
+		for (int i = 0; i<corners.size(); i++){
+			cornerFlag[corners[i].y][corners[i].x] = true;
+			corners[i].x += offsetX;
+			corners[i].y += offsetY;
+			circle(rgb, corners[i], 5, Scalar(255, 0, 0));
+		}
+		//imshow("source", rgb); waitKey();
+
 		// contour line connection method
 		vector<Point> polygon;	//记录多边形上的点
 		int **orderAtThisPoint = new int*[edge.size().height];	// 记录点在多边形上的顺序，从1开始
@@ -307,12 +328,23 @@ void registerSourceChar(){
 		sampleInterval += extraInterval / numKeyPoints;
 		double sampleStep = sampleInterval / numSample;	// 每个采样段中，两个普通点之间的距离
 		vector<Point> samplePoints;	// 采样后得到的点
-		int numInterval = sampleInterval / numSample;
 		for (int i = 0; i < numKeyPoints; i++){
-			int basePosition = sampleInterval * i;
+			double basePosition = sampleInterval * i;
 			for (int j = 0; j < numSample; j++){
-				int pointIndex = basePosition + sampleStep * j;
+				int pointIndex = floor(basePosition + sampleStep * j);
 				samplePoints.push_back(polygon[pointIndex]);
+				// replace regular sample points by the corner points
+				for (int p = 1; p <= sampleStep - 1; p++){
+					int index = floor(fmod(basePosition + sampleStep * (j - .5) + p + polygon.size(), polygon.size()));
+					Point pnt = polygon[index];
+					if (cornerFlag[pnt.y][pnt.x]){
+						cout << "replace corner (" << pnt.x + offsetX << ", " << pnt.y + offsetY << ")" << endl;
+						cornerFlag[pnt.y][pnt.x] = false;
+						samplePoints.pop_back();
+						samplePoints.push_back(pnt);
+						break;
+					}
+				}
 			}
 		}
 		// Plot the polygon
@@ -321,11 +353,12 @@ void registerSourceChar(){
 			Point *p = &samplePoints[i];
 			p->x += offsetX;
 			p->y += offsetY;
-			circle(rgb, *p, 2, Scalar(0, 0, 0), CV_FILLED);
+			circle(rgb, *p, 2, Scalar(0, 0, 0));
 		}
 		for (int i = 0; i < samplePoints.size();i+=numSample){
 			circle(rgb, samplePoints[i], 5, Scalar(0, 0, 255));
 		}
+		imshow("source", rgb); waitKey();
 		
 		// Triangulation
 		vector<Point2> inputPoints;
@@ -370,9 +403,11 @@ void registerSourceChar(){
 		sourceCharVert.insert(sourceCharVert.end(), samplePoints.begin(), samplePoints.end());
 		imshow("source", rgb); waitKey();
 
-		for(int i=0;i<edge.size().height;i++){
+		for (int i = 0; i<edge.size().height; i++){
+			delete[] cornerFlag[i];
 			delete[] orderAtThisPoint[i];
 		}
+		delete[] cornerFlag;
 		delete[] orderAtThisPoint;
  	} // end of for stroke
 	for (vector<Triangle>::iterator it = connectTri.begin(); it != connectTri.end(); it++){
@@ -631,9 +666,8 @@ void registerTargetChar(){
 					int index = floor(fmod(kp1Order + numIntervalPoints*j + polygon.size(), polygon.size())); // notice the detail
 					samplePoints.push_back(polygon[(index - 1 + polygon.size()) % polygon.size()]);
 					// replace regular sample points by the corner points
-					int numSampleSub = 2 * floor(abs(numIntervalPoints)) - 1;
-					for (int p = 1; p <= numSampleSub; p++){
-						index = floor(fmod(kp1Order + numIntervalPoints*(j - 1) + p*step + polygon.size(), polygon.size()));
+					for (int p = 1; p <= floor(abs(numIntervalPoints)) - 1; p++){
+						index = floor(fmod(kp1Order + numIntervalPoints*(j - .5) + p*step + polygon.size(), polygon.size()));
 						Point pnt = polygon[(index - 1 + polygon.size()) % polygon.size()];
 						if (cornerFlag[pnt.y][pnt.x]){
 							cout << "大圈 replace corner (" << pnt.x + offsetX << ", " << pnt.y + offsetY << ")" << endl;
