@@ -18,21 +18,39 @@
     <None Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="stdafx.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="targetver.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="Constant.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="MorphingService.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DataStructure.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ARAPMorphingService.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DisplayService.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="PointsPlotDisplayService.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Utility.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="stdafx.cpp">
+    <ClCompile Include="FontMorphingTool.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="FontMorphingTool.cpp">
+    <ClCompile Include="ARAPMorphingService.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="PointsPlotDisplayService.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Utility.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

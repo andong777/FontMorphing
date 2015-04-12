@@ -1,69 +1,49 @@
-#include "stdafx.h"
+#pragma once
+
+#include "Constant.h"
+#include "DataStructure.h"
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include <iostream>
 #include <fstream>
 #include <stdlib.h>
 #include <vector>
-#include "Constant.h"
 #include "OriCPD.h"
 #include "Fade_2D.h"
-#include <Eigen/Dense>
+#include "ARAPMorphingService.h"
+#include "PointsPlotDisplayService.h"
+#include "Utility.h"
 
 #define CPD_FROM_FILE
-#define SHOW_DETAILS
 
+using namespace FM;
 using namespace cv;
 using namespace std;
 using namespace SGCPD;
 using namespace GEOM_FADE2D;
 using namespace Eigen;
 
-static const int deltaAngle[8][2] = {{0,1},{1,1},{1,0},{1,-1},{0,-1},{-1,-1},{-1,0},{-1,1}};	// 顺时针
-
-Point SGCPDPointToCVPoint(CPointDouble& cpdp);
-CPointDouble CVPointToSGCPDPoint(Point& cvp);
-Point Fade2DPointToCVPoint(Point2& f2dp);
-Point2 CVPointToFade2DPoint(Point& cvp);
-
-Mat fillHoles(Mat imInput);
-vector< vector<bool> > getCorners(const Mat& mat);
-Point findStartPoint(const Mat& mat);
-vector< vector<int> > getPolygon(Mat mat, Point start, vector<Point>& polygon);
-void plotPoints(vector<Point> points, Mat canvas, string title = "points", bool pause = true, Scalar color = Scalar(0, 0, 0));
-
-typedef struct Triangle {
-public:
-	int va;
-	int vb;
-	int vc;
-	Triangle(){}
-	Triangle(int a, int b, int c){
-		va = a; vb = b; vc = c;
-	}
-} Triangle;
-
 ifstream f;
 
 // template data
 int numSample = 8;
 int numStroke;
-vector<Triangle> connectTri;
-vector<Triangle> triMesh;
-vector<Point> templateCharVert;	// subscript from 1
+TriMesh connectTri;
+TriMesh triMesh;
+PointSet templateCharVert;	// subscript from 1
 int* strokeStartAtVertex;	// must be global!	// todo: use vector instead
 
 // source char
 Mat sourceCharImage;
 int sourceCharBox[4];
 int (*sourceStrokeBox)[4];
-vector<Point> sourceCharVert;	// subscript from 1
+PointSet sourceCharVert;	// subscript from 1
 
 // target char
 Mat targetCharImage;
 int targetCharBox[4];
 int (*targetStrokeBox)[4];
-vector<Point> targetCharVert;	// subscript from 1
+PointSet targetCharVert;	// subscript from 1
 
 void readCharactersData(){
 	// read the labels of strokes
@@ -94,7 +74,6 @@ void readCharactersData(){
 		cout << "connectTri num: " << cnt << endl;
 		f.close();
 	}
-
 	// read stroke meshes and build the whole mesh for the template
 	int numVex = 0, numTri;
 	strokeStartAtVertex = new int[numStroke + 2]; // starts from 1.
@@ -206,18 +185,15 @@ void getTemplateFromSourceCharacter(){
 		Mat edge;	// 边缘检测得到的矩阵，边缘为白色。
 		Canny(filled, edge, 40, 120);	// Canny方法输出灰度矩阵
 
-		auto cornerFlag = getCorners(edge);
+		vector< vector<bool> > cornerFlag = getCorners(edge);
 		cout << cornerFlag.size() << "!" << endl;
 
 		// contour line connection method
-		vector<Point> polygon;	//记录多边形上的点
+		PointSet polygon;	//记录多边形上的点
 		// 寻找多边形的起始点
 		Point startPoint = findStartPoint(edge);
 		int currentX = startPoint.x, currentY = startPoint.y;
 		cout << "?(" << currentX << ", " << currentY << ")" << endl;
-		/*circle(rgb, Point(currentX+offsetX, currentY+offsetY), 2, Scalar(0, 0, 255), CV_FILLED);
-		cout << "current: (" << currentX+offsetX << ", " << currentY+offsetY << ")" << endl;
-		imshow("", rgb); waitKey();*/
 		getPolygon(edge, startPoint, polygon);
 
 		double sampleInterval = 100.;	// 每两个关键点间的大致距离
@@ -225,7 +201,7 @@ void getTemplateFromSourceCharacter(){
 		double extraInterval = polygon.size() - sampleInterval * numKeyPoints;	// 划分后多余的长度，被均分到每个采样段中
 		sampleInterval += extraInterval / numKeyPoints;
 		double sampleStep = sampleInterval / numSample;	// 每个采样段中，两个普通点之间的距离
-		vector<Point> samplePoints;	// 采样后得到的点
+		PointSet samplePoints;	// 采样后得到的点
 		for (int i = 0; i < numKeyPoints; i++){
 			double basePosition = sampleInterval * i;
 			for (int j = 0; j < numSample; j++){
@@ -251,7 +227,10 @@ void getTemplateFromSourceCharacter(){
 			p->x += offsetX;
 			p->y += offsetY;
 		}
-		plotPoints(samplePoints, rgb, "source", false);
+		DisplayService *plot = new PointsPlotDisplayService(samplePoints);
+		plot->setDisplay("source", false, Size(0, 0), rgb);
+		plot->doDisplay();
+		delete plot;
 		for (int i = 0; i < samplePoints.size();i+=numSample){
 			circle(rgb, samplePoints[i], 5, Scalar(0, 0, 255));
 		}
@@ -259,7 +238,7 @@ void getTemplateFromSourceCharacter(){
 		
 		// Triangulation
 		vector<Point2> inputPoints;
-		for (vector<Point>::iterator it = samplePoints.begin(); it != samplePoints.end(); it++){
+		for (auto it = samplePoints.begin(); it != samplePoints.end(); it++){
 			inputPoints.push_back(CVPointToFade2DPoint(*it));
 		}
 		Fade_2D dt;
@@ -276,12 +255,12 @@ void getTemplateFromSourceCharacter(){
 		zone->getTriangles(outputTriangles);
 		
 		// 更新变量，释放内存等
-		for (vector<Triangle2*>::iterator it = outputTriangles.begin(); it != outputTriangles.end(); it++){
+		for (auto it = outputTriangles.begin(); it != outputTriangles.end(); it++){
 			Point p[3];
 			int v[3];
 			for (int i = 0; i < 3; i++){
 				p[i] = Fade2DPointToCVPoint(*(**it).getCorner(i));
-				vector<Point>::iterator pos = std::find(samplePoints.begin(), samplePoints.end(), p[i]);
+				auto pos = std::find(samplePoints.begin(), samplePoints.end(), p[i]);
 				if (pos != samplePoints.end()){
 					v[i] = pos - samplePoints.begin() + 1;	// vertices starts from 1.
 					v[i] += sourceCharVert.size() - 1;	// 加上前面所有笔画的点数，作为三角形顶点的偏移量。注意要在更新点之前更新！
@@ -300,7 +279,7 @@ void getTemplateFromSourceCharacter(){
 		sourceCharVert.insert(sourceCharVert.end(), samplePoints.begin(), samplePoints.end());
 		imshow("source", rgb); waitKey();
  	} // end of for stroke
-	for (vector<Triangle>::iterator it = connectTri.begin(); it != connectTri.end(); it++){
+	for (auto it = connectTri.begin(); it != connectTri.end(); it++){
 		int a = (*it).va;	// because vertex starts from 1.
 		int b = (*it).vb;
 		int c = (*it).vc;
@@ -405,7 +384,7 @@ void registerPointSetToTargetCharacter(){
 		}
 
 		// find key points on the contour
-		vector<Point> keyPoints;
+		PointSet keyPoints;
 		int *vertexBelongToTemplate = new int[X.size()];
 		for (int i = 0; i<X.size(); i++)	vertexBelongToTemplate[i] = -1;
 		for (int i = 0; i<Y.size(); i += numSample){
@@ -424,24 +403,24 @@ void registerPointSetToTargetCharacter(){
 			keyPoints.push_back(p);
 		}
 		cout << keyPoints.size() << " key points." << endl;
-		for (vector<Point>::iterator it = keyPoints.begin(); it != keyPoints.end(); it++){
+		for (auto it = keyPoints.begin(); it != keyPoints.end(); it++){
 			cout << "(" << (*it).x << ", " << (*it).y << ") ";
 			circle(rgb, *it, 5, Scalar(0, 0, 255));
 		}
 		cout << endl;
 
 		// find corner points on the contour
-		auto cornerFlag = getCorners(edge);
+		vector< vector<bool> > cornerFlag = getCorners(edge);
 
 		// contour line connection method
-		vector<Point> polygon;	//记录多边形上的点
+		PointSet polygon;	//记录多边形上的点
 		for (int i = 0; i<keyPoints.size(); i++){	// character image -> large stroke image
 			keyPoints[i].x -= offsetX;
 			keyPoints[i].y -= offsetY;
 		}
-		auto orderAtThisPoint = getPolygon(edge, keyPoints[0], polygon);	// 记录点在多边形上的顺序
+		vector< vector<int> > orderAtThisPoint = getPolygon(edge, keyPoints[0], polygon);	// 记录点在多边形上的顺序
 
-		vector<Point> samplePoints;	// 采样后得到的点
+		PointSet samplePoints;	// 采样后得到的点
 		for (int i = 0; i<keyPoints.size(); i++){
 			int i2 = (i + 1) % keyPoints.size();	// 下一个关键点
 			samplePoints.push_back(keyPoints[i]);
@@ -509,146 +488,14 @@ void registerPointSetToTargetCharacter(){
 			p->x += offsetX;
 			p->y += offsetY;
 		}
-		plotPoints(samplePoints, rgb, "target", true);
+		DisplayService *plot = new PointsPlotDisplayService(samplePoints);
+		plot->setDisplay("target", false, Size(0, 0), rgb);
+		plot->doDisplay();
+		delete plot;
 		targetCharVert.insert(targetCharVert.end(), samplePoints.begin(), samplePoints.end());
 
 		delete[] vertexBelongToTemplate;
 	}
-}
-
-void doMorphing(int numStep){
-	int posFixed = 10;
-	vector<Triangle> &tri = triMesh;
-	int numTri = tri.size(), numVert = sourceCharVert.size() - 1;
-	Point *sv = new Point[numVert + 1];
-	Point *tv = new Point[numVert + 1];
-	for (int i = 0; i <= numVert; i++){
-		sv[i] = sourceCharVert[i] - sourceCharVert[posFixed];
-		tv[i] = targetCharVert[i] - targetCharVert[posFixed];
-	}
-
-	float *angle = new float[numTri];
-	for (int i = 0; i < numTri; i++) angle[i] = .0;
-	vector<MatrixXf> D;
-	MatrixXf H = MatrixXf::Zero(2 * numVert, 2 * numVert);
-	vector<MatrixXf> G_temp;
-	for (int i = 0; i < numTri; i++){
-		Triangle t = tri[i];
-		MatrixXf H_temp = MatrixXf::Zero(4, 2 * numVert);
-		Point triSource[] = { sv[t.va], sv[t.vb], sv[t.vc] };
-		Point triTarget[] = { tv[t.va], tv[t.vb], tv[t.vc] };
-		MatrixXf Al(6, 6);
-		Al << triSource[0].x, triSource[0].y, 0, 0, 1, 0,
-			0, 0, triSource[0].x, triSource[0].y, 0, 1,
-			triSource[1].x, triSource[1].y, 0, 0, 1, 0,
-			0, 0, triSource[1].x, triSource[1].y, 0, 1,
-			triSource[2].x, triSource[2].y, 0, 0, 1, 0,
-			0, 0, triSource[2].x, triSource[2].y, 0, 1;
-		VectorXf b(6);
-		b << triTarget[0].x, triTarget[0].y, triTarget[1].x, triTarget[1].y, triTarget[2].x, triTarget[2].y;
-		VectorXf C = Al.colPivHouseholderQr().solve(b);
-		MatrixXf Al_temp = Al.inverse().topRows(4);
-		H_temp.col(2 * t.va - 1 - 1) = Al_temp.col(0);
-		H_temp.col(2 * t.va - 1) = Al_temp.col(1);
-		H_temp.col(2 * t.vb - 1 - 1) = Al_temp.col(2);
-		H_temp.col(2 * t.vb - 1) = Al_temp.col(3);
-		H_temp.col(2 * t.vc - 1 - 1) = Al_temp.col(4);
-		H_temp.col(2 * t.vc - 1) = Al_temp.col(5);
-		H += H_temp.transpose() * H_temp;
-		G_temp.push_back(H_temp.transpose());
-		Matrix2f A_ori;
-		A_ori << C(0), C(1), C(2), C(3);
-		JacobiSVD<MatrixXf> svd(A_ori, ComputeFullU | ComputeFullV);
-		Matrix2f S = Matrix2f::Zero();
-		VectorXf singularValues = svd.singularValues();
-		for (int j = 0; j < singularValues.rows(); j++){
-			S(j, j) = singularValues(j);
-		}
-		MatrixXf U = svd.matrixU();
-		MatrixXf V = svd.matrixV();  
-		MatrixXf Rr = U * V.transpose();
-		D.push_back(V * S * V.transpose());
-		angle[i] = asinf(Rr(1, 0));
-		if (Rr(0, 0) < 0 && Rr(1, 0) > 0){
-			angle[i] = acosf(Rr(0, 0));
-		}
-		else if (Rr(0, 0) < 0 && Rr(1, 0) < 0){
-			angle[i] = -angle[i] - M_PI;
-		}
-	}
-
-	posFixed--;
-	MatrixXf tempMatH(2 * numVert - 2, 2 * numVert - 2);
-	int longEdge = 2 * posFixed, shortEdge = 2 * numVert - 2 * posFixed - 2;
-	tempMatH.topLeftCorner(longEdge, longEdge) = H.topLeftCorner(longEdge, longEdge);
-	tempMatH.bottomLeftCorner(shortEdge, longEdge) = H.bottomLeftCorner(shortEdge, longEdge);
-	tempMatH.topRightCorner(longEdge, shortEdge) = H.topRightCorner(longEdge, shortEdge);
-	tempMatH.bottomRightCorner(shortEdge, shortEdge) = H.bottomRightCorner(shortEdge, shortEdge);
-	MatrixXf H_new = tempMatH.inverse();
-
-	for (int i = 0; i <= numStep; i++){
-		float ratio = 1.f * i / numStep;
-		VectorXf G = VectorXf::Zero(2 * numVert);
-		for (int j = 0; j < numTri; j++){
-			Matrix2f Rr;
-			float tmpAngle = angle[j] * ratio;
-			Rr << cosf(tmpAngle), -sinf(tmpAngle), sinf(tmpAngle), cosf(tmpAngle);
-			Matrix2f A = Rr * ((1 - ratio) * Matrix2f::Identity() + ratio * D[j]);
-			Vector4f A_temp(A(0, 0), A(0, 1), A(1, 0), A(1, 1));
-			G += G_temp[j] * A_temp;
-		}
-		VectorXf tempVecG(2 * numVert - 2);
-		tempVecG.head(longEdge) = G.head(longEdge);
-		tempVecG.tail(shortEdge) = G.tail(shortEdge);
-		VectorXf xy = H_new * tempVecG;
-		Point *tempVert = new Point[numVert + 1];
-		tempVert[posFixed + 1] = sv[posFixed + 1];
-		for (int j = 1; j <= posFixed; j++){
-			int x = xy(j * 2 - 1 - 1);
-			int y = xy(j * 2 - 1);
-			tempVert[j] = Point(x, y);
-		}
-		for (int j = posFixed + 2; j <= numVert; j++){
-			int x = xy(j * 2 - 3 - 1);
-			int y = xy(j * 2 - 2 - 1);
-			tempVert[j] = Point(x, y);
-		}
-		for (int j = 1; j <= numVert; j++){
-			tempVert[j].x += sourceCharVert[posFixed].x + 20;
-			tempVert[j].y += sourceCharVert[posFixed].y + 20;
-		}
-
-		int imgH = sourceCharBox[3] - sourceCharBox[1] + 10;
-		int imgW = sourceCharBox[2] - sourceCharBox[0] + 10;
-		Mat image(floor(1.f*imgH) + 30, floor(1.f*imgW) + 30, CV_8UC1, Scalar(255));
-		ostringstream osss;
-		osss << "step: " << i << " / " << numStep;
-		putText(image, osss.str(), Point(250, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 255));
-		for (int i = 0; i < numTri/* - connectTri.size()*/; i++){
-#ifdef SHOW_DETAILS
-			int a = tri[i].va;
-			int b = tri[i].vb;
-			int c = tri[i].vc;
-			line(image, tempVert[a], tempVert[b], Scalar(0));
-			line(image, tempVert[b], tempVert[c], Scalar(0));
-			line(image, tempVert[c], tempVert[a], Scalar(0));
-#else
-			Point gon[1][3];
-			gon[0][0] = tempVert[tri[i].va];
-			gon[0][1] = tempVert[tri[i].vb];
-			gon[0][2] = tempVert[tri[i].vc];
-			const Point* ppt[1] = { gon[0] }; int npt[] = { 3 };
-			fillPoly(image, ppt, npt, 1, Scalar(0, 0, 0));
-#endif
-		}
-		delete tempVert;
-		imshow("morphing", image); waitKey();
-		ostringstream oss;
-
-		oss << charName << "_" << i << ".jpg";
-		imwrite(oss.str(), image);
-	}
-	delete angle, tv, sv;
 }
 
 int main( int, char** argv )
@@ -657,156 +504,14 @@ int main( int, char** argv )
 	getTemplateFromSourceCharacter();
 	registerPointSetToTargetCharacter();
 	do{
-		doMorphing(20);
+		ARAPMorphingService *morphing = new ARAPMorphingService;
+		int imgH = sourceCharBox[3] - sourceCharBox[1] + 40;
+		int imgW = sourceCharBox[2] - sourceCharBox[0] + 40;
+		morphing->setDisplay("morphing", true, Size(imgW, imgH));
+		morphing->doMorphing(sourceCharVert, targetCharVert, triMesh, 10);
+		morphing->doDisplay();
+		delete morphing;
 	} while (1);
 	system("pause");
 	return 0;
-}
-
-Point SGCPDPointToCVPoint(CPointDouble& cpdp){
-	return Point(cpdp.x, cpdp.y);
-}
-
-CPointDouble CVPointToSGCPDPoint(Point& cvp){
-	return CPointDouble(cvp.x, cvp.y);
-}
-
-Point Fade2DPointToCVPoint(Point2& f2dp){
-	return Point(f2dp.x(), f2dp.y());
-}
-
-Point2 CVPointToFade2DPoint(Point& cvp){
-	return Point2(cvp.x, cvp.y);
-}
-
-Mat fillHoles(Mat imInput){
-    Mat imShow = Mat::zeros(imInput.size(),CV_8UC3);    // for show result
-	vector<vector<Point> > contours;
-    vector<Vec4i> hierarchy;
-    findContours(imInput, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
-    for (int idx=0;idx < contours.size();idx++){
-        drawContours(imShow,contours,idx,Scalar::all(255),CV_FILLED,8);
-    }
-    Mat imFilledHoles;
-    cvtColor(imShow,imFilledHoles,CV_BGR2GRAY);
-    imFilledHoles = imFilledHoles > 0;
-    imShow.release();
-    return imFilledHoles;
-}
-
-vector< vector<bool> > getCorners(const Mat& mat){
-	vector< vector<bool> > cornerFlag(mat.size().height);
-	for (int i = 0; i < cornerFlag.size(); i++){
-		cornerFlag[i] = vector<bool>(mat.size().width);
-	}
-	for (int i = 0; i<mat.size().height; i++){
-		for (int j = 0; j<mat.size().width; j++){
-			cornerFlag[i][j] = false;
-		}
-	}
-	vector<Point> corners;
-	goodFeaturesToTrack(mat, corners, 20, .05, 20, Mat(), 5, true, .1);
-	cout << corners.size() << " corner points." << endl;
-	for (int i = 0; i<corners.size(); i++){
-		cornerFlag[corners[i].y][corners[i].x] = true;
-		//circle(mat, corners[i], 5, Scalar(255, 0, 0));
-	}
-	//imshow("corners", mat); waitKey();
-	return cornerFlag;
-}
-
-Point findStartPoint(const Mat& mat){
-	for (int i = 0; i < mat.cols; i++){
-		for (int j = 0; j < mat.rows; j++){
-			if (mat.at<uchar>(j, i) > 128){
-				int firstStepCnt = 0, maxSecondStepCnt = 0;
-				for (int i = 0; i < 8; i++){	// todo: 注意！这里和后面使用i，j是错误的。这里使用它是因为连接三角形还没有实现自动获得。
-					int tempX = i + deltaAngle[i][0];
-					int tempY = j + deltaAngle[i][1];
-					if (mat.at<uchar>(tempY, tempX) > 128){
-						firstStepCnt++;
-						int secondStepCnt = 0;
-						for (int j = 0; j<8; j++){
-							int tempXX = tempX + deltaAngle[j][0];
-							int tempYY = tempY + deltaAngle[j][1];
-							if (mat.at<uchar>(tempYY, tempXX) > 128){
-								secondStepCnt++;
-							}
-						}
-						if (secondStepCnt > maxSecondStepCnt)	maxSecondStepCnt = secondStepCnt;
-					}
-				}
-				if (firstStepCnt >= 1 && maxSecondStepCnt >= 1){
-					return Point(i, j);
-				}
-			}
-		}
-	}
-	return Point(-1, -1);
-}
-
-vector< vector<int> > getPolygon(Mat mat, Point start, vector<Point>& polygon){
-	// todo: 这样找到的多边形有些角点并不在上面！
-	vector< vector<int> > orderAtThisPoint(mat.size().height);
-	for (int i = 0; i < orderAtThisPoint.size(); i++){
-		orderAtThisPoint[i] = vector<int>(mat.size().width);
-	}
-	for (int i = 0; i < mat.size().height; i++){
-		for (int j = 0; j < mat.size().width; j++){
-			orderAtThisPoint[i][j] = 0;
-		}
-	}
-	int currentX = start.x;
-	int currentY = start.y;
-	while (mat.at<uchar>(currentY, currentX) > 128){
-		polygon.push_back(Point(currentX, currentY));
-		orderAtThisPoint[currentY][currentX] = polygon.size();
-		mat.at<uchar>(currentY, currentX) = 0;	// 标记此点已经用过，避免找回到此点
-		int firstStepCnt = 0;
-		int secondStepCnt[8] = { 0 };	// 标记选择一个点后，第二次能找到几个点
-		int firstStepDirection[8] = { 0 };
-		for (int i = 0; i<8; i++){
-			int tempX = currentX + deltaAngle[i][0];
-			int tempY = currentY + deltaAngle[i][1];
-			if (mat.at<uchar>(tempY, tempX) > 128){
-				firstStepCnt++;
-				firstStepDirection[firstStepCnt - 1] = i;
-				for (int j = 0; j<8; j++){
-					int tempXX = tempX + deltaAngle[j][0];
-					int tempYY = tempY + deltaAngle[j][1];
-					if (mat.at<uchar>(tempYY, tempXX) > 128){
-						secondStepCnt[firstStepCnt - 1]++;
-					}
-				}
-			}
-		}
-		if (firstStepCnt == 1){	// 只找到了一个后续点
-			currentX += deltaAngle[firstStepDirection[0]][0];
-			currentY += deltaAngle[firstStepDirection[0]][1];
-		}
-		else if (firstStepCnt > 1){	// 多个可选的后续点
-			int minCnt = infinity, direct = -1;
-			for (int i = 0; i<firstStepCnt; i++){
-				if (secondStepCnt[i] >= 1 && secondStepCnt[i] < minCnt){	// 找后续点最少的后续点？
-					minCnt = secondStepCnt[i];
-					direct = firstStepDirection[i];
-				}
-			}
-			currentX += deltaAngle[direct][0];
-			currentY += deltaAngle[direct][1];
-		}
-		else{	// 没找到后续点，多边形的构建结束
-			cout << "find no next points" << endl;
-		}
-	}
-	return orderAtThisPoint;
-}
-
-void plotPoints(vector<Point> points, Mat canvas, string title, bool pause, Scalar color){
-	cout << points.size() << " points in " << title << "." << endl;
-	for (int i = 0; i < points.size(); i++){
-		circle(canvas, points[i], 2, Scalar(0, 0, 0));
-	}
-	imshow(title, canvas); 
-	if(pause)	waitKey();
 }
