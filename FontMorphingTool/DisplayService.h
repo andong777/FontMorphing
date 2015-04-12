@@ -10,7 +10,6 @@ class DisplayService
 {
 protected:
 	string title;
-	bool refresh;
 	Size size;
 	Mat canvas;
 	Scalar color;
@@ -18,9 +17,8 @@ protected:
 public:
 	virtual ~DisplayService() {}
 
-	virtual void setDisplay(string title = "", bool refresh = false, Size size = Size(), Mat canvas = Mat(500, 500, CV_8UC3, Scalar(255, 255, 255)), Scalar color = Scalar(0, 0, 0)){
+	virtual void setDisplay(string title = "", Size size = Size(), Mat canvas = Mat(500, 500, CV_8UC3, Scalar(255, 255, 255)), Scalar color = Scalar(0, 0, 0)){
 		this->title = title;
-		this->refresh = refresh;
 		this->size = size;
 		if (size.height > 0 && size.width > 0){
 			this->canvas = Mat(size, CV_8UC3, Scalar(255, 255, 255));

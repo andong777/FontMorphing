@@ -10,4 +10,3 @@ Mat fillHoles(Mat imInput);
 vector< vector<bool> > getCorners(const Mat& mat);
 Point findStartPoint(const Mat& mat);
 vector< vector<int> > getPolygon(Mat mat, Point start, FM::PointSet& polygon);
-

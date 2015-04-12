@@ -86,8 +86,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ARAPMorphingService.h" />
+    <ClInclude Include="CharacterImage.h" />
     <ClInclude Include="Constant.h" />
     <ClInclude Include="DataStructure.h" />
+    <ClInclude Include="MeshPlotDisplayService.h" />
     <ClInclude Include="MorphingService.h" />
     <ClInclude Include="DisplayService.h" />
     <ClInclude Include="PointsPlotDisplayService.h" />
@@ -95,7 +97,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ARAPMorphingService.cpp" />
+    <ClCompile Include="CharacterImage.cpp" />
     <ClCompile Include="FontMorphingTool.cpp" />
+    <ClCompile Include="MeshPlotDisplayService.cpp" />
     <ClCompile Include="PointsPlotDisplayService.cpp" />
     <ClCompile Include="Utility.cpp" />
   </ItemGroup>

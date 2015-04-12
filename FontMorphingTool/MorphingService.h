@@ -12,4 +12,3 @@ public:
 	virtual void doMorphing(PointSet source, PointSet target, TriMesh mesh, int numStep) = 0;
 	virtual PointSet getPointSetByStepIndex(int stepIndex) = 0;
 };
-

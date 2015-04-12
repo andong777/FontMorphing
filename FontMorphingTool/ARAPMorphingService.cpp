@@ -1,4 +1,5 @@
 #include "ARAPMorphingService.h"
+#include "MeshPlotDisplayService.h"
 
 using namespace std;
 using namespace FM;
@@ -20,10 +21,10 @@ void ARAPMorphingService::doMorphing(PointSet source, PointSet target, TriMesh m
 	this->mesh = mesh;
 
 	int posFixed = 10;
-	int numTri = mesh.size(), numVert = source.size() - 1;
-	Point *sv = new Point[numVert + 1];
-	Point *tv = new Point[numVert + 1];
-	for (int i = 0; i <= numVert; i++){
+	int numTri = mesh.size(), numVert = source.size();
+	Point *sv = new Point[numVert];
+	Point *tv = new Point[numVert];
+	for (int i = 0; i < numVert; i++){
 		sv[i] = source[i] - source[posFixed];
 		tv[i] = target[i] - target[posFixed];
 	}
@@ -49,12 +50,12 @@ void ARAPMorphingService::doMorphing(PointSet source, PointSet target, TriMesh m
 		b << triTarget[0].x, triTarget[0].y, triTarget[1].x, triTarget[1].y, triTarget[2].x, triTarget[2].y;
 		VectorXf C = Al.colPivHouseholderQr().solve(b);
 		MatrixXf Al_temp = Al.inverse().topRows(4);
-		H_temp.col(2 * t.va - 1 - 1) = Al_temp.col(0);
-		H_temp.col(2 * t.va - 1) = Al_temp.col(1);
-		H_temp.col(2 * t.vb - 1 - 1) = Al_temp.col(2);
-		H_temp.col(2 * t.vb - 1) = Al_temp.col(3);
-		H_temp.col(2 * t.vc - 1 - 1) = Al_temp.col(4);
-		H_temp.col(2 * t.vc - 1) = Al_temp.col(5);
+		H_temp.col(2 * t.va + 1) = Al_temp.col(0);
+		H_temp.col(2 * t.va) = Al_temp.col(1);
+		H_temp.col(2 * t.vb + 1) = Al_temp.col(2);
+		H_temp.col(2 * t.vb) = Al_temp.col(3);
+		H_temp.col(2 * t.vc + 1) = Al_temp.col(4);
+		H_temp.col(2 * t.vc) = Al_temp.col(5);
 		H += H_temp.transpose() * H_temp;
 		G_temp.push_back(H_temp.transpose());
 		Matrix2f A_ori;
@@ -104,17 +105,17 @@ void ARAPMorphingService::doMorphing(PointSet source, PointSet target, TriMesh m
 		VectorXf xy = H_new * tempVecG;
 		PointSet tempVert(numVert + 1);
 		tempVert[posFixed + 1] = sv[posFixed + 1];
-		for (int j = 1; j <= posFixed; j++){
-			int x = xy(j * 2 - 1 - 1);
-			int y = xy(j * 2 - 1);
+		for (int j = 0; j < posFixed; j++){
+			int x = xy(j * 2 - 1);
+			int y = xy(j * 2);
 			tempVert[j] = Point(x, y);
 		}
-		for (int j = posFixed + 2; j <= numVert; j++){
-			int x = xy(j * 2 - 3 - 1);
-			int y = xy(j * 2 - 2 - 1);
+		for (int j = posFixed + 1; j < numVert; j++){
+			int x = xy(j * 2 - 3);
+			int y = xy(j * 2 - 2);
 			tempVert[j] = Point(x, y);
 		}
-		for (int j = 1; j <= numVert; j++){
+		for (int j = 0; j < numVert; j++){
 			tempVert[j].x += source[posFixed].x + 20;
 			tempVert[j].y += source[posFixed].y + 20;
 		}
@@ -131,30 +132,14 @@ void ARAPMorphingService::doDisplay()
 		ostringstream osss;
 		osss << "step: " << i << " / " << pointSets.size() - 1;
 		putText(canvas, osss.str(), Point(250, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 0));
-		for (int j = 0; j < mesh.size(); j++){
-#ifdef SHOW_DETAILS
-			int a = mesh[j].va;
-			int b = mesh[j].vb;
-			int c = mesh[j].vc;
-			line(canvas, pointSets[i][a], pointSets[i][b], color);
-			line(canvas, pointSets[i][b], pointSets[i][c], color);
-			line(canvas, pointSets[i][c], pointSets[i][a], color);
-#else
-			Point gon[1][3];
-			gon[0][0] = pointSets[i][mesh[j].va];
-			gon[0][1] = pointSets[i][mesh[j].vb];
-			gon[0][2] = pointSets[i][mesh[j].vc];
-			const Point* ppt[1] = { gon[0] }; int npt[] = { 3 };
-			fillPoly(canvas, ppt, npt, 1, color);
-#endif
-		}
-		imshow(title, canvas); waitKey();
+		DisplayService *plot = new MeshPlotDisplayService(mesh, pointSets[i]);
+		plot->setDisplay("morphing", Size(0, 0), canvas, color);
+		plot->doDisplay();
+		delete plot;
 		ostringstream oss;
 		oss << i << ".jpg";
 		imwrite(oss.str(), canvas);
-		if (refresh){
-			canvas = originalCanvas.clone();
-		}
+		canvas = originalCanvas.clone();
 	}
 }
 

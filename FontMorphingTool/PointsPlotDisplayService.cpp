@@ -1,6 +1,5 @@
 #include "PointsPlotDisplayService.h"
 
-
 PointsPlotDisplayService::PointsPlotDisplayService(PointSet points)
 {
 	this->points = points;

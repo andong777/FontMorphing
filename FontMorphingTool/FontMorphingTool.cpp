@@ -2,6 +2,7 @@
 
 #include "Constant.h"
 #include "DataStructure.h"
+#include "CharacterImage.h"
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include <iostream>
@@ -12,6 +13,7 @@
 #include "Fade_2D.h"
 #include "ARAPMorphingService.h"
 #include "PointsPlotDisplayService.h"
+#include "MeshPlotDisplayService.h"
 #include "Utility.h"
 
 #define CPD_FROM_FILE
@@ -23,30 +25,19 @@ using namespace SGCPD;
 using namespace GEOM_FADE2D;
 using namespace Eigen;
 
-ifstream f;
-
-// template data
 int numSample = 8;
 int numStroke;
+CharacterImage sourceChar;
+CharacterImage targetChar;
 TriMesh connectTri;
 TriMesh triMesh;
-PointSet templateCharVert;	// subscript from 1
-int* strokeStartAtVertex;	// must be global!	// todo: use vector instead
-
-// source char
-Mat sourceCharImage;
-int sourceCharBox[4];
-int (*sourceStrokeBox)[4];
-PointSet sourceCharVert;	// subscript from 1
-
-// target char
-Mat targetCharImage;
-int targetCharBox[4];
-int (*targetStrokeBox)[4];
-PointSet targetCharVert;	// subscript from 1
+vector<int> strokeStartAtVertex;
+PointSet sourceCharVert;
+PointSet targetCharVert;
 
 void readCharactersData(){
 	// read the labels of strokes
+	ifstream f;
 	f.open(templateCharPathPrefix + "\\" + charName + strokeLabelSuffix);
 	if(f){
 		string line;
@@ -58,6 +49,8 @@ void readCharactersData(){
 		cout << "numStroke: " << numStroke << endl;
 		f.close();
 	}
+	sourceChar.setNumOfStroke(numStroke);
+	targetChar.setNumOfStroke(numStroke);
 	// read the vertex Number of connection triangles for all strokes in a given character %连接三角形所有顶点数（关键点）
 	f.open(templateCharPathPrefix + "\\" + charName + connTriSuffix);
 	if(f){
@@ -74,73 +67,47 @@ void readCharactersData(){
 		cout << "connectTri num: " << cnt << endl;
 		f.close();
 	}
-	// read stroke meshes and build the whole mesh for the template
-	int numVex = 0, numTri;
-	strokeStartAtVertex = new int[numStroke + 2]; // starts from 1.
-	strokeStartAtVertex[0] = 1;	// vertex number starts from 1. 
-	templateCharVert.push_back(Point(0, 0));	// never access subscript 0.
-	for(int no=1;no<=numStroke;no++){
- 		strokeStartAtVertex[no] = strokeStartAtVertex[no-1] + numVex;
-		ostringstream os;
-		os << templateCharPath << "_" << no << ".off";
-		f.open(os.str().c_str());
-		if(f){
-			f >> numVex >> numTri >> numSample;	// 每个off文件都存储一个numSample值，看样子可以为不同的笔画指定不同的值，但实际上后来的计算都是用了最后一次循环读出来的numSample。
-			for(int i=1;i<=numVex;i++){
-				int x, y;
-				f >> x >> y;
-				Point v(x, y);
-				templateCharVert.push_back(v);
-			}
-			f.close();
-		}
-	}
-	strokeStartAtVertex[numStroke+1] = strokeStartAtVertex[numStroke] + numVex;	// 这样我们不需要记录笔画到哪个点结束，只要找下个点开始的位置-1即可。
 
 	// show the character 1
-	sourceCharImage = imread(sourceCharPath + "_R.bmp");
+	Mat sourceCharImage = imread(sourceCharPath + "_R.bmp");
 	imshow("source", sourceCharImage); waitKey();
 	// read the coordinates of the bounding box for a character 视图，骨架边界？
+	int sourceCharBox[4];
 	f.open(sourceCharPath + charBoxSuffix);
 	if (f){
-		for (int i = 0; i<4; i++){
-			f >> sourceCharBox[i];
-			cout << sourceCharBox[i] << endl;
-		}
+		for (int i = 0; i<4; i++)	f >> sourceCharBox[i];
 		f.close();
 	}
+	sourceChar.setCharBox(sourceCharBox);
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(sourceCharPath + strokeBoxSuffix);
-	sourceStrokeBox = new int[numStroke + 1][4];
 	if (f){
 		for (int i = 1; i <= numStroke; i++){
-			for (int j = 0; j<4; j++){
-				f >> sourceStrokeBox[i][j];
-			}
+			int strokeBox[4];
+			for (int j = 0; j<4; j++)	f >> strokeBox[j];
+			sourceChar.setStrokeBox(i - 1, strokeBox);
 		}
 		f.close();
 	}
 
 	// show the character 2
-	targetCharImage = imread(targetCharPath + "_R.bmp");
+	Mat targetCharImage = imread(targetCharPath + "_R.bmp");
 	imshow("target", targetCharImage); waitKey();
 	// read the coordinates of the bounding box for a character 视图，骨架边界？
+	int targetCharBox[4];
 	f.open(targetCharPath + charBoxSuffix);
 	if (f){
-		for (int i = 0; i<4; i++){
-			f >> targetCharBox[i];
-			cout << targetCharBox[i] << endl;
-		}
+		for (int i = 0; i<4; i++)	f >> targetCharBox[i];
 		f.close();
 	}
+	targetChar.setCharBox(targetCharBox);
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(targetCharPath + strokeBoxSuffix);
-	targetStrokeBox = new int[numStroke + 1][4];
 	if (f){
 		for (int i = 1; i <= numStroke; i++){
-			for (int j = 0; j<4; j++){
-				f >> targetStrokeBox[i][j];
-			}
+			int strokeBox[4];
+			for (int j = 0; j<4; j++)	f >> strokeBox[j];
+			targetChar.setStrokeBox(i - 1, strokeBox);
 		}
 		f.close();
 	}
@@ -148,12 +115,12 @@ void readCharactersData(){
 
 void getTemplateFromSourceCharacter(){
 	// generate the source character by assembling its strokes
-	int imgH = sourceCharBox[3] - sourceCharBox[1] + 10;
-	int imgW = sourceCharBox[2] - sourceCharBox[0] + 10;
+	int imgH = sourceChar.getCharHeight() + 10;
+	int imgW = sourceChar.getCharWidth() + 10;
 	Mat rgb(imgH, imgW, CV_8UC3, Scalar(255, 255, 255));
 	for(int no=1;no<=numStroke;no++){
-		int offsetX = sourceStrokeBox[no][0] - sourceCharBox[0] + 5;
-		int offsetY = sourceStrokeBox[no][1] - sourceCharBox[1] + 5;
+		int offsetX = sourceChar.getStrokeOffsetX(no - 1) + 5;
+		int offsetY = sourceChar.getStrokeOffsetY(no - 1) + 5;
 		ostringstream os;
 		os << sourceCharPath << "_" << no << ".bmp";
 		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
@@ -167,11 +134,11 @@ void getTemplateFromSourceCharacter(){
 		}
 	}
 
-	sourceCharVert.push_back(Point(0, 0));	// never access subscript 0.
+	strokeStartAtVertex.resize(numStroke + 2, 0);
 	for(int no=1;no<=numStroke;no++){
 		cout << "processing stroke "<<no<<endl;
-		int offsetX = sourceStrokeBox[no][0] - sourceCharBox[0];
-		int offsetY = sourceStrokeBox[no][1] - sourceCharBox[1];
+		int offsetX = sourceChar.getStrokeOffsetX(no - 1);
+		int offsetY = sourceChar.getStrokeOffsetY(no - 1);
 		ostringstream os;
 		os << sourceCharPath << "_" << no << ".bmp";
 		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
@@ -228,7 +195,7 @@ void getTemplateFromSourceCharacter(){
 			p->y += offsetY;
 		}
 		DisplayService *plot = new PointsPlotDisplayService(samplePoints);
-		plot->setDisplay("source", false, Size(0, 0), rgb);
+		plot->setDisplay("source", Size(0, 0), rgb);
 		plot->doDisplay();
 		delete plot;
 		for (int i = 0; i < samplePoints.size();i+=numSample){
@@ -262,8 +229,8 @@ void getTemplateFromSourceCharacter(){
 				p[i] = Fade2DPointToCVPoint(*(**it).getCorner(i));
 				auto pos = std::find(samplePoints.begin(), samplePoints.end(), p[i]);
 				if (pos != samplePoints.end()){
-					v[i] = pos - samplePoints.begin() + 1;	// vertices starts from 1.
-					v[i] += sourceCharVert.size() - 1;	// 加上前面所有笔画的点数，作为三角形顶点的偏移量。注意要在更新点之前更新！
+					v[i] = pos - samplePoints.begin();
+					v[i] += sourceCharVert.size();	// 加上前面所有笔画的点数，作为三角形顶点的偏移量。注意要在更新点之前更新！
 				}
 				else{
 					v[i] = -1;
@@ -272,35 +239,29 @@ void getTemplateFromSourceCharacter(){
 			}
 			Triangle tri(v[0], v[1], v[2]);
 			triMesh.push_back(tri);
-			for (int i = 0; i < 3; i++){
-				line(rgb, p[i], p[(i + 1) % 3], Scalar(255, 0, 0));
-			}
 		}
+		strokeStartAtVertex[no] = sourceCharVert.size();
 		sourceCharVert.insert(sourceCharVert.end(), samplePoints.begin(), samplePoints.end());
-		imshow("source", rgb); waitKey();
  	} // end of for stroke
-	for (auto it = connectTri.begin(); it != connectTri.end(); it++){
-		int a = (*it).va;	// because vertex starts from 1.
-		int b = (*it).vb;
-		int c = (*it).vc;
-		line(rgb, sourceCharVert[a], sourceCharVert[b], Scalar(255, 0, 0));
-		line(rgb, sourceCharVert[b], sourceCharVert[c], Scalar(255, 0, 0));
-		line(rgb, sourceCharVert[c], sourceCharVert[a], Scalar(255, 0, 0));
-	}
-	imshow("source", rgb); waitKey();
+	strokeStartAtVertex[numStroke + 1] = sourceCharVert.size();	// 这样我们不需要记录笔画到哪个点结束，只要找下个点开始的位置-1即可。
+
 	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
 	cout << endl << "There are " << triMesh.size() << " triangles in source character." << endl;
+	DisplayService *plot = new MeshPlotDisplayService(triMesh, sourceCharVert);
+	plot->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
+	plot->doDisplay();
+	delete plot;
 }
 
 void registerPointSetToTargetCharacter(){
 	// generate the target character by assembling its strokes
-	int imgH = targetCharBox[3] - targetCharBox[1] + 10;
-	int imgW = targetCharBox[2] - targetCharBox[0] + 10;
+	int imgH = targetChar.getCharHeight() + 10;
+	int imgW = targetChar.getCharWidth() + 10;
 	Mat rgb(imgH, imgW, CV_8UC3, Scalar(255, 255, 255));
 	for (int no = 1; no <= numStroke; no++){
-		int offsetX = targetStrokeBox[no][0] - targetCharBox[0] + 5;
-		int offsetY = targetStrokeBox[no][1] - targetCharBox[1] + 5;
+		int offsetX = targetChar.getStrokeOffsetX(no - 1) + 5;
+		int offsetY = targetChar.getStrokeOffsetY(no - 1) + 5;
 		ostringstream os;
 		os << targetCharPath << "_" << no << ".bmp";
 		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
@@ -313,11 +274,11 @@ void registerPointSetToTargetCharacter(){
 			}
 		}
 	}
-	targetCharVert.push_back(Point(0, 0));	// never access subscript 0.
+
 	for (int no = 1; no <= numStroke; no++){
 		cout << "processing stroke " << no << endl;
-		int offsetX = targetStrokeBox[no][0] - targetCharBox[0];
-		int offsetY = targetStrokeBox[no][1] - targetCharBox[1];
+		int offsetX = targetChar.getStrokeOffsetX(no - 1);
+		int offsetY = targetChar.getStrokeOffsetY(no - 1);
 		ostringstream os;
 		os << targetCharPath << "_" << no << ".bmp";
 		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
@@ -357,7 +318,7 @@ void registerPointSetToTargetCharacter(){
 		}
 		inf.close();
 #else
-		for (int i = strokeStartAtVertex[no]; i<strokeStartAtVertex[no + 1] - 1; i++){
+		for (int i = strokeStartAtVertex[no]; i <= strokeStartAtVertex[no + 1] - 1; i++){
 			CPointDouble cpdp = CVPointToSGCPDPoint(sourceCharVert[i]);
 			Y.push_back(cpdp);
 			S.push_back(no);	// or any other constant
@@ -402,6 +363,7 @@ void registerPointSetToTargetCharacter(){
 			Point p(X[index].x, X[index].y);
 			keyPoints.push_back(p);
 		}
+		delete[] vertexBelongToTemplate;
 		cout << keyPoints.size() << " key points." << endl;
 		for (auto it = keyPoints.begin(); it != keyPoints.end(); it++){
 			cout << "(" << (*it).x << ", " << (*it).y << ") ";
@@ -489,13 +451,15 @@ void registerPointSetToTargetCharacter(){
 			p->y += offsetY;
 		}
 		DisplayService *plot = new PointsPlotDisplayService(samplePoints);
-		plot->setDisplay("target", false, Size(0, 0), rgb);
+		plot->setDisplay("target", Size(0, 0), rgb);
 		plot->doDisplay();
 		delete plot;
 		targetCharVert.insert(targetCharVert.end(), samplePoints.begin(), samplePoints.end());
-
-		delete[] vertexBelongToTemplate;
 	}
+	DisplayService *plot = new MeshPlotDisplayService(triMesh, targetCharVert);
+	plot->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
+	plot->doDisplay();
+	delete plot;
 }
 
 int main( int, char** argv )
@@ -505,9 +469,9 @@ int main( int, char** argv )
 	registerPointSetToTargetCharacter();
 	do{
 		ARAPMorphingService *morphing = new ARAPMorphingService;
-		int imgH = sourceCharBox[3] - sourceCharBox[1] + 40;
-		int imgW = sourceCharBox[2] - sourceCharBox[0] + 40;
-		morphing->setDisplay("morphing", true, Size(imgW, imgH));
+		int imgH = sourceChar.getCharHeight() + 40;
+		int imgW = sourceChar.getCharWidth() + 40;
+		morphing->setDisplay("morphing", Size(imgW, imgH));
 		morphing->doMorphing(sourceCharVert, targetCharVert, triMesh, 10);
 		morphing->doDisplay();
 		delete morphing;
