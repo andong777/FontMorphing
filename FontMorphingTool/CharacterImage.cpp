@@ -14,12 +14,12 @@ CharacterImage::CharacterImage(int numStroke)
 
 CharacterImage::~CharacterImage()
 {
-	delete strokeBox;
+	delete[] strokeBox;
 }
 
 void CharacterImage::setNumOfStroke(int numStroke)
 {
-	delete strokeBox;
+	delete[] strokeBox;
 	this->numStroke = numStroke;
 	strokeBox = new int[numStroke][4];
 }

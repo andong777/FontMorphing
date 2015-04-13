@@ -16,15 +16,21 @@ ARAPMorphingService::~ARAPMorphingService()
 
 void ARAPMorphingService::doMorphing(PointSet source, PointSet target, TriMesh mesh, int numStep)
 {
-	this->source = source;
-	this->target = target;
-	this->mesh = mesh;
+	// todo: 这只是临时的丑陋做法，后面一定要改成从0开始的！
+	// 准备数据。
+	source.insert(source.begin(), Point());
+	target.insert(target.begin(), Point());
+	for (auto it = mesh.begin(); it != mesh.end(); it++){
+		(*it).va++;
+		(*it).vb++;
+		(*it).vc++;
+	}
 
 	int posFixed = 10;
-	int numTri = mesh.size(), numVert = source.size();
-	Point *sv = new Point[numVert];
-	Point *tv = new Point[numVert];
-	for (int i = 0; i < numVert; i++){
+	int numTri = mesh.size(), numVert = source.size()-1;
+	Point *sv = new Point[numVert+1];
+	Point *tv = new Point[numVert+1];
+	for (int i = 1; i <= numVert; i++){
 		sv[i] = source[i] - source[posFixed];
 		tv[i] = target[i] - target[posFixed];
 	}
@@ -50,12 +56,12 @@ void ARAPMorphingService::doMorphing(PointSet source, PointSet target, TriMesh m
 		b << triTarget[0].x, triTarget[0].y, triTarget[1].x, triTarget[1].y, triTarget[2].x, triTarget[2].y;
 		VectorXf C = Al.colPivHouseholderQr().solve(b);
 		MatrixXf Al_temp = Al.inverse().topRows(4);
-		H_temp.col(2 * t.va + 1) = Al_temp.col(0);
-		H_temp.col(2 * t.va) = Al_temp.col(1);
-		H_temp.col(2 * t.vb + 1) = Al_temp.col(2);
-		H_temp.col(2 * t.vb) = Al_temp.col(3);
-		H_temp.col(2 * t.vc + 1) = Al_temp.col(4);
-		H_temp.col(2 * t.vc) = Al_temp.col(5);
+		H_temp.col(2 * t.va - 1 - 1) = Al_temp.col(0);
+		H_temp.col(2 * t.va - 1) = Al_temp.col(1);
+		H_temp.col(2 * t.vb - 1 - 1) = Al_temp.col(2);
+		H_temp.col(2 * t.vb - 1) = Al_temp.col(3);
+		H_temp.col(2 * t.vc - 1 - 1) = Al_temp.col(4);
+		H_temp.col(2 * t.vc - 1) = Al_temp.col(5);
 		H += H_temp.transpose() * H_temp;
 		G_temp.push_back(H_temp.transpose());
 		Matrix2f A_ori;
@@ -105,23 +111,36 @@ void ARAPMorphingService::doMorphing(PointSet source, PointSet target, TriMesh m
 		VectorXf xy = H_new * tempVecG;
 		PointSet tempVert(numVert + 1);
 		tempVert[posFixed + 1] = sv[posFixed + 1];
-		for (int j = 0; j < posFixed; j++){
-			int x = xy(j * 2 - 1);
-			int y = xy(j * 2);
+		for (int j = 1; j <= posFixed; j++){
+			int x = xy(j * 2 - 1 - 1);
+			int y = xy(j * 2 - 1);
 			tempVert[j] = Point(x, y);
 		}
-		for (int j = posFixed + 1; j < numVert; j++){
-			int x = xy(j * 2 - 3);
-			int y = xy(j * 2 - 2);
+		for (int j = posFixed + 2; j <= numVert; j++){
+			int x = xy(j * 2 - 3 - 1);
+			int y = xy(j * 2 - 2 - 1);
 			tempVert[j] = Point(x, y);
 		}
-		for (int j = 0; j < numVert; j++){
+		for (int j = 1; j <= numVert; j++){
 			tempVert[j].x += source[posFixed].x + 20;
 			tempVert[j].y += source[posFixed].y + 20;
 		}
+		tempVert.erase(tempVert.begin());
 		pointSets.push_back(tempVert);
 	} // end of numStep
 	delete angle, tv, sv;
+
+	// 恢复数据
+	for (auto it = mesh.begin(); it != mesh.end(); it++){
+		(*it).va--;
+		(*it).vb--;
+		(*it).vc--;
+	}
+	source.erase(source.begin());
+	target.erase(target.begin());
+	this->source = source;
+	this->target = target;
+	this->mesh = mesh;
 }
 
 void ARAPMorphingService::doDisplay()

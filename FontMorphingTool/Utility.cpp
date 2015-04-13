@@ -24,6 +24,7 @@ Mat fillHoles(Mat imInput){
 }
 
 vector< vector<bool> > getCorners(const Mat& mat, PointSet& outputCorners){
+	// todo: 如果有时间，改进效果
 	vector< vector<bool> > cornerFlag(mat.size().height);
 	for (int i = 0; i < cornerFlag.size(); i++){
 		cornerFlag[i] = vector<bool>(mat.size().width);
@@ -48,15 +49,15 @@ Point findStartPoint(const Mat& mat){
 		for (int j = 0; j < mat.rows; j++){
 			if (mat.at<uchar>(j, i) > 128){
 				int firstStepCnt = 0, maxSecondStepCnt = 0;
-				for (int i = 0; i < 8; i++){	// todo: 注意！这里和后面使用i，j是错误的。这里使用它是因为连接三角形还没有实现自动获得。
-					int tempX = i + deltaAngle[i][0];
-					int tempY = j + deltaAngle[i][1];
+				for (int d = 0; d < 8; d++){
+					int tempX = i + deltaAngle[d][0];
+					int tempY = j + deltaAngle[d][1];
 					if (mat.at<uchar>(tempY, tempX) > 128){
 						firstStepCnt++;
 						int secondStepCnt = 0;
-						for (int j = 0; j<8; j++){
-							int tempXX = tempX + deltaAngle[j][0];
-							int tempYY = tempY + deltaAngle[j][1];
+						for (int dd = 0; dd<8; dd++){
+							int tempXX = tempX + deltaAngle[dd][0];
+							int tempYY = tempY + deltaAngle[dd][1];
 							if (mat.at<uchar>(tempYY, tempXX) > 128){
 								secondStepCnt++;
 							}
@@ -75,20 +76,20 @@ Point findStartPoint(const Mat& mat){
 
 vector< vector<int> > getPolygon(Mat mat, Point start, PointSet& polygon){
 	// todo: 这样找到的多边形有些角点并不在上面！
-	vector< vector<int> > orderAtThisPoint(mat.size().height);
+	vector< vector<int> > orderAtThisPoint(mat.size().height);	// starts from 0.
 	for (int i = 0; i < orderAtThisPoint.size(); i++){
 		orderAtThisPoint[i] = vector<int>(mat.size().width);
 	}
 	for (int i = 0; i < mat.size().height; i++){
 		for (int j = 0; j < mat.size().width; j++){
-			orderAtThisPoint[i][j] = 0;
+			orderAtThisPoint[i][j] = -1;
 		}
 	}
 	int currentX = start.x;
 	int currentY = start.y;
 	while (mat.at<uchar>(currentY, currentX) > 128){
-		polygon.push_back(Point(currentX, currentY));
 		orderAtThisPoint[currentY][currentX] = polygon.size();
+		polygon.push_back(Point(currentX, currentY));
 		mat.at<uchar>(currentY, currentX) = 0;	// 标记此点已经用过，避免找回到此点
 		int firstStepCnt = 0;
 		int secondStepCnt[8] = { 0 };	// 标记选择一个点后，第二次能找到几个点

@@ -16,7 +16,7 @@
 #include "MeshPlotDisplayService.h"
 #include "Utility.h"
 
-//#define CPD_FROM_FILE
+#define CPD_FROM_FILE
 
 using namespace FM;
 using namespace cv;
@@ -305,9 +305,13 @@ void registerPointSetToTargetCharacter(){
 
 		// find corner points on the contour
 		PointSet corners;
-		vector< vector<bool> > cornerFlag = getCorners(edge);
+		vector< vector<bool> > cornerFlag = getCorners(edge, corners);
+		for (auto it = corners.begin(); it != corners.end(); it++){
+			(*it).x += offsetX;
+			(*it).y += offsetY;
+		}
 		DisplayService *plt = new PointsPlotDisplayService(corners, 5);
-		plt->setDisplay("target", Size(0, 0), rgb);
+		plt->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
 		plt->doDisplay();
 		delete plt;
 
@@ -404,7 +408,7 @@ void registerPointSetToTargetCharacter(){
 			samplePoints.push_back(keyPoints[i]);
 			int kp1Order = orderAtThisPoint[keyPoints[i].y][keyPoints[i].x];
 			int kp2Order = orderAtThisPoint[keyPoints[i2].y][keyPoints[i2].x];
-			if (kp1Order <= 0 || kp2Order <= 0){
+			if (kp1Order < 0 || kp2Order < 0){
 				cout << "some key points are off the polygon." << endl;
 				break;
 			}
@@ -414,19 +418,19 @@ void registerPointSetToTargetCharacter(){
 				if (kp1Order > kp2Order)	numIntervalPoints *= -1;
 				for (int j = 1; j<numSample; j++){
 					int index = floor(kp1Order + numIntervalPoints * j);
-					samplePoints.push_back(polygon[index - 1]);	// 因为order是从1开始，所以取下标要减1.
+					samplePoints.push_back(polygon[index]);
 					// replace regular sample points by the corner points
 					int startPos, endPos;	// to let startPos < endPos
 					if (kp1Order < kp2Order){	// 点1 -> 点2
-						startPos = floor(kp1Order + numIntervalPoints * (j - 1) + 1);	// notice the number '1', 
-						endPos = floor(kp1Order + numIntervalPoints * (j + 1) - 1);	// which means it's an exclusive interval. 3.28
+						startPos = floor(kp1Order + numIntervalPoints * (j - .5) + 1);	// notice the number '1', which means it's an exclusive interval. 3.28
+						endPos = floor(kp1Order + numIntervalPoints * (j + .5) - 1);	// shorten the search interval. 4.13
 					}
 					else{	// 点2 -> 点1
-						startPos = floor(kp1Order + numIntervalPoints * (j + 1) + 1);
-						endPos = floor(kp1Order + numIntervalPoints * (j - 1) - 1);
+						startPos = floor(kp1Order + numIntervalPoints * (j + .5) + 1);
+						endPos = floor(kp1Order + numIntervalPoints * (j - .5) - 1);
 					}
 					for (int p = startPos; p <= endPos; p++){
-						Point pnt = polygon[p - 1];	// 同上
+						Point pnt = polygon[p];
 						if (cornerFlag[pnt.y][pnt.x]){
 							cout << "小圈 replace corner (" << pnt.x + offsetX << ", " << pnt.y + offsetY << ")" << endl;
 							cornerFlag[pnt.y][pnt.x] = false;
@@ -443,11 +447,11 @@ void registerPointSetToTargetCharacter(){
 				int step = numIntervalPoints / abs(numIntervalPoints);	// +1 or -1
 				for (int j = 1; j<numSample; j++){
 					int index = floor(fmod(kp1Order + numIntervalPoints*j + polygon.size(), polygon.size())); // notice the detail
-					samplePoints.push_back(polygon[(index - 1 + polygon.size()) % polygon.size()]);
+					samplePoints.push_back(polygon[(index + polygon.size()) % polygon.size()]);
 					// replace regular sample points by the corner points
 					for (int p = 1; p <= floor(abs(numIntervalPoints)) - 1; p++){
 						index = floor(fmod(kp1Order + numIntervalPoints*(j - .5) + p*step + polygon.size(), polygon.size()));
-						Point pnt = polygon[(index - 1 + polygon.size()) % polygon.size()];
+						Point pnt = polygon[(index + polygon.size()) % polygon.size()];
 						if (cornerFlag[pnt.y][pnt.x]){
 							cout << "大圈 replace corner (" << pnt.x + offsetX << ", " << pnt.y + offsetY << ")" << endl;
 							cornerFlag[pnt.y][pnt.x] = false;
