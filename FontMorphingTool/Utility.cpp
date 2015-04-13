@@ -23,7 +23,7 @@ Mat fillHoles(Mat imInput){
 	return imFilledHoles;
 }
 
-vector< vector<bool> > getCorners(const Mat& mat){
+vector< vector<bool> > getCorners(const Mat& mat, PointSet& outputCorners){
 	vector< vector<bool> > cornerFlag(mat.size().height);
 	for (int i = 0; i < cornerFlag.size(); i++){
 		cornerFlag[i] = vector<bool>(mat.size().width);
@@ -33,12 +33,11 @@ vector< vector<bool> > getCorners(const Mat& mat){
 			cornerFlag[i][j] = false;
 		}
 	}
-	PointSet corners;
-	goodFeaturesToTrack(mat, corners, 20, .05, 20, Mat(), 5, true, .1);
-	cout << corners.size() << " corner points." << endl;
-	for (int i = 0; i<corners.size(); i++){
-		cornerFlag[corners[i].y][corners[i].x] = true;
-		//circle(mat, corners[i], 5, Scalar(255, 0, 0));
+	goodFeaturesToTrack(mat, outputCorners, 20, .05, 20, Mat(), 5, true, .1);
+	cout << outputCorners.size() << " corner points." << endl;
+	for (int i = 0; i < outputCorners.size(); i++){
+		cornerFlag[outputCorners[i].y][outputCorners[i].x] = true;
+		//circle(mat, outputCorners[i], 5, Scalar(255, 0, 0));
 	}
 	//imshow("corners", mat); waitKey();
 	return cornerFlag;

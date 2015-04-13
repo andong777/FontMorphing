@@ -16,7 +16,7 @@
 #include "MeshPlotDisplayService.h"
 #include "Utility.h"
 
-#define CPD_FROM_FILE
+//#define CPD_FROM_FILE
 
 using namespace FM;
 using namespace cv;
@@ -31,7 +31,7 @@ CharacterImage sourceChar;
 CharacterImage targetChar;
 TriMesh connectTri;
 TriMesh triMesh;
-vector<int> strokeStartAtVertex;
+vector<int> strokeEndAtVertex;
 PointSet sourceCharVert;
 PointSet targetCharVert;
 
@@ -75,17 +75,17 @@ void readCharactersData(){
 	int sourceCharBox[4];
 	f.open(sourceCharPath + charBoxSuffix);
 	if (f){
-		for (int i = 0; i<4; i++)	f >> sourceCharBox[i];
+		for (int i = 0; i < 4; i++)	f >> sourceCharBox[i];
 		f.close();
 	}
 	sourceChar.setCharBox(sourceCharBox);
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(sourceCharPath + strokeBoxSuffix);
 	if (f){
-		for (int i = 1; i <= numStroke; i++){
+		for (int i = 0; i < numStroke; i++){
 			int strokeBox[4];
-			for (int j = 0; j<4; j++)	f >> strokeBox[j];
-			sourceChar.setStrokeBox(i - 1, strokeBox);
+			for (int j = 0; j < 4; j++)	f >> strokeBox[j];
+			sourceChar.setStrokeBox(i, strokeBox);
 		}
 		f.close();
 	}
@@ -104,10 +104,10 @@ void readCharactersData(){
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(targetCharPath + strokeBoxSuffix);
 	if (f){
-		for (int i = 1; i <= numStroke; i++){
+		for (int i = 0; i < numStroke; i++){
 			int strokeBox[4];
-			for (int j = 0; j<4; j++)	f >> strokeBox[j];
-			targetChar.setStrokeBox(i - 1, strokeBox);
+			for (int j = 0; j < 4; j++)	f >> strokeBox[j];
+			targetChar.setStrokeBox(i, strokeBox);
 		}
 		f.close();
 	}
@@ -118,11 +118,11 @@ void getTemplateFromSourceCharacter(){
 	int imgH = sourceChar.getCharHeight() + 10;
 	int imgW = sourceChar.getCharWidth() + 10;
 	Mat rgb(imgH, imgW, CV_8UC3, Scalar(255, 255, 255));
-	for(int no=1;no<=numStroke;no++){
-		int offsetX = sourceChar.getStrokeOffsetX(no - 1) + 5;
-		int offsetY = sourceChar.getStrokeOffsetY(no - 1) + 5;
+	for(int no = 0;no < numStroke; no++){
+		int offsetX = sourceChar.getStrokeOffsetX(no) + 5;
+		int offsetY = sourceChar.getStrokeOffsetY(no) + 5;
 		ostringstream os;
-		os << sourceCharPath << "_" << no << ".bmp";
+		os << sourceCharPath << "_" << (no+1) << ".bmp";
 		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
 		for(int h=0;h<strokeImg.rows;h++){
 			for(int w=0;w<strokeImg.cols;w++){
@@ -134,13 +134,13 @@ void getTemplateFromSourceCharacter(){
 		}
 	}
 
-	strokeStartAtVertex.resize(numStroke + 2, 0);
-	for(int no=1;no<=numStroke;no++){
+	strokeEndAtVertex.resize(numStroke, 0);
+	for(int no = 0; no < numStroke; no++){
 		cout << "processing stroke "<<no<<endl;
-		int offsetX = sourceChar.getStrokeOffsetX(no - 1);
-		int offsetY = sourceChar.getStrokeOffsetY(no - 1);
+		int offsetX = sourceChar.getStrokeOffsetX(no);
+		int offsetY = sourceChar.getStrokeOffsetY(no);
 		ostringstream os;
-		os << sourceCharPath << "_" << no << ".bmp";
+		os << sourceCharPath << "_" << (no+1) << ".bmp";
 		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
 		Mat largerStrokeImg(strokeImg.size().height+10, strokeImg.size().width+10, CV_8UC1, Scalar(0));
 		for(int i=0;i<strokeImg.rows;i++){
@@ -152,15 +152,23 @@ void getTemplateFromSourceCharacter(){
 		Mat edge;	// 边缘检测得到的矩阵，边缘为白色。
 		Canny(filled, edge, 40, 120);	// Canny方法输出灰度矩阵
 
-		vector< vector<bool> > cornerFlag = getCorners(edge);
-		cout << cornerFlag.size() << "!" << endl;
+		PointSet corners;
+		vector< vector<bool> > cornerFlag = getCorners(edge, corners);
+		for (auto it = corners.begin(); it != corners.end(); it++){
+			(*it).x += offsetX;
+			(*it).y += offsetY;
+		}
+		DisplayService *plt = new PointsPlotDisplayService(corners, 5);
+		plt->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
+		plt->doDisplay();
+		delete plt;
 
 		// contour line connection method
 		PointSet polygon;	//记录多边形上的点
 		// 寻找多边形的起始点
 		Point startPoint = findStartPoint(edge);
 		int currentX = startPoint.x, currentY = startPoint.y;
-		cout << "?(" << currentX << ", " << currentY << ")" << endl;
+		cout << "initial point = (" << currentX << ", " << currentY << ")" << endl;
 		getPolygon(edge, startPoint, polygon);
 
 		double sampleInterval = 100.;	// 每两个关键点间的大致距离
@@ -194,7 +202,7 @@ void getTemplateFromSourceCharacter(){
 			p->x += offsetX;
 			p->y += offsetY;
 		}
-		DisplayService *plot = new PointsPlotDisplayService(samplePoints);
+		DisplayService *plot = new PointsPlotDisplayService(samplePoints, 2, true);
 		plot->setDisplay("source", Size(0, 0), rgb);
 		plot->doDisplay();
 		delete plot;
@@ -240,14 +248,17 @@ void getTemplateFromSourceCharacter(){
 			Triangle tri(v[0], v[1], v[2]);
 			triMesh.push_back(tri);
 		}
-		strokeStartAtVertex[no] = sourceCharVert.size();
 		sourceCharVert.insert(sourceCharVert.end(), samplePoints.begin(), samplePoints.end());
+		strokeEndAtVertex[no] = sourceCharVert.size() - 1;
  	} // end of for stroke
-	strokeStartAtVertex[numStroke + 1] = sourceCharVert.size();	// 这样我们不需要记录笔画到哪个点结束，只要找下个点开始的位置-1即可。
+
+	for (int i = 0; i < numStroke; i++){
+		cout << "stroke " << i << " ends at vertex " << strokeEndAtVertex[i] << endl;
+	}
 
 	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
-	cout << endl << "There are " << triMesh.size() << " triangles in source character." << endl;
+	cout << "There are " << triMesh.size() << " triangles in source character." << endl;
 	DisplayService *plot = new MeshPlotDisplayService(triMesh, sourceCharVert);
 	plot->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
 	plot->doDisplay();
@@ -259,11 +270,11 @@ void registerPointSetToTargetCharacter(){
 	int imgH = targetChar.getCharHeight() + 10;
 	int imgW = targetChar.getCharWidth() + 10;
 	Mat rgb(imgH, imgW, CV_8UC3, Scalar(255, 255, 255));
-	for (int no = 1; no <= numStroke; no++){
-		int offsetX = targetChar.getStrokeOffsetX(no - 1) + 5;
-		int offsetY = targetChar.getStrokeOffsetY(no - 1) + 5;
+	for (int no = 0; no < numStroke; no++){
+		int offsetX = targetChar.getStrokeOffsetX(no) + 5;
+		int offsetY = targetChar.getStrokeOffsetY(no) + 5;
 		ostringstream os;
-		os << targetCharPath << "_" << no << ".bmp";
+		os << targetCharPath << "_" << (no+1) << ".bmp";
 		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
 		for (int h = 0; h<strokeImg.rows; h++){
 			for (int w = 0; w<strokeImg.cols; w++){
@@ -275,12 +286,12 @@ void registerPointSetToTargetCharacter(){
 		}
 	}
 
-	for (int no = 1; no <= numStroke; no++){
+	for (int no = 0; no < numStroke; no++){
 		cout << "processing stroke " << no << endl;
-		int offsetX = targetChar.getStrokeOffsetX(no - 1);
-		int offsetY = targetChar.getStrokeOffsetY(no - 1);
+		int offsetX = targetChar.getStrokeOffsetX(no);
+		int offsetY = targetChar.getStrokeOffsetY(no);
 		ostringstream os;
-		os << targetCharPath << "_" << no << ".bmp";
+		os << targetCharPath << "_" << (no+1) << ".bmp";
 		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
 		Mat largerStrokeImg(strokeImg.size().height + 10, strokeImg.size().width + 10, CV_8UC1, Scalar(0));
 		for (int i = 0; i<strokeImg.rows; i++){
@@ -291,6 +302,14 @@ void registerPointSetToTargetCharacter(){
 		Mat filled = fillHoles(largerStrokeImg);
 		Mat edge;	// 边缘检测得到的矩阵，边缘为白色。
 		Canny(filled, edge, 40, 120);	// Canny方法输出灰度矩阵
+
+		// find corner points on the contour
+		PointSet corners;
+		vector< vector<bool> > cornerFlag = getCorners(edge);
+		DisplayService *plt = new PointsPlotDisplayService(corners, 5);
+		plt->setDisplay("target", Size(0, 0), rgb);
+		plt->doDisplay();
+		delete plt;
 
 		// CPD registration
 		vector<CPointDouble> X;
@@ -318,7 +337,7 @@ void registerPointSetToTargetCharacter(){
 		}
 		inf.close();
 #else
-		for (int i = strokeStartAtVertex[no]; i <= strokeStartAtVertex[no + 1] - 1; i++){
+		for (int i = (no == 0 ? 0 : strokeEndAtVertex[no - 1] + 1); i <= strokeEndAtVertex[no]; i++){
 			CPointDouble cpdp = CVPointToSGCPDPoint(sourceCharVert[i]);
 			Y.push_back(cpdp);
 			S.push_back(no);	// or any other constant
@@ -370,9 +389,6 @@ void registerPointSetToTargetCharacter(){
 			circle(rgb, *it, 5, Scalar(0, 0, 255));
 		}
 		cout << endl;
-
-		// find corner points on the contour
-		vector< vector<bool> > cornerFlag = getCorners(edge);
 
 		// contour line connection method
 		PointSet polygon;	//记录多边形上的点
@@ -456,6 +472,7 @@ void registerPointSetToTargetCharacter(){
 		delete plot;
 		targetCharVert.insert(targetCharVert.end(), samplePoints.begin(), samplePoints.end());
 	}
+	cout << endl << "There are " << targetCharVert.size() << " points in target character." << endl;
 	DisplayService *plot = new MeshPlotDisplayService(triMesh, targetCharVert);
 	plot->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
 	plot->doDisplay();
