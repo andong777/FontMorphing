@@ -1,6 +1,7 @@
 #include "Utility.h"
 #include "Constant.h"
 #include "opencv2/imgproc/imgproc.hpp"
+#include <queue>
 
 using namespace std;
 using namespace cv;
@@ -8,7 +9,7 @@ using namespace FM;
 
 static const int deltaAngle[8][2] = { { 0, 1 }, { 1, 1 }, { 1, 0 }, { 1, -1 }, { 0, -1 }, { -1, -1 }, { -1, 0 }, { -1, 1 } };	// 顺时针
 
-Mat fillHoles(Mat imInput){
+Mat fillHoles(Mat& imInput){
 	Mat imShow = Mat::zeros(imInput.size(), CV_8UC3);    // for show result
 	vector<PointSet > contours;
 	vector<Vec4i> hierarchy;
@@ -129,4 +130,84 @@ vector< vector<int> > getPolygon(Mat mat, Point start, PointSet& polygon){
 		}
 	}
 	return orderAtThisPoint;
+}
+
+bool checkTriangle(const Point& a, const Point& b, const Point& c)
+{
+	float va2vb = sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + .0);
+	float vb2vc = sqrt((b.x - c.x) * (b.x - c.x) + (b.y - c.y) * (b.y - c.y) + .0);
+	float va2vc = sqrt((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y) + .0);
+	float minEdge = min(min(va2vb, vb2vc), va2vc);
+	float maxEdge = max(max(va2vb, vb2vc), va2vc);
+	if (maxEdge / minEdge >= 5){	// 过于瘦高
+		return false;
+	}
+	float twoEdges = va2vb + vb2vc + va2vc - maxEdge;
+	if (maxEdge / twoEdges >= 0.9){	// 过于矮胖
+		return false;
+	}
+	return true;
+}
+
+TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVertex)
+{
+	int numStroke = strokeEndAtVertex.size();
+	TriMesh connectTri;
+
+	// stub
+	/*connectTri.push_back(Triangle(35, 36, 137));
+	connectTri.push_back(Triangle(171, 173, 75));*/
+
+	for (int i = 0; i < numStroke - 1; i++){
+		int startPos = i == 0 ? 0 : strokeEndAtVertex[i - 1] + 1;
+		int endPos = strokeEndAtVertex[i];
+		int numPoints = endPos - startPos + 1;
+		Point center(0, 0);	// 当前笔画的重心
+		for (int j = startPos; j <= endPos; j++){
+			center += pointSet[j];
+		}
+		center.x /= numPoints;
+		center.y /= numPoints;
+
+		// 找出下个笔画上离当前笔画重心最近的点。
+		int minIdx = -1;
+		int minDist = infinity;
+		int startPosNext = strokeEndAtVertex[i] + 1;
+		int endPosNext = strokeEndAtVertex[i + 1];
+		int numPointsNext = endPosNext - startPosNext + 1;
+		for (int j = startPosNext; j <= endPosNext; j++){
+			Point diff = center - pointSet[j];
+			int dist = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
+			if (dist < minDist){
+				minDist = dist;
+				minIdx = j;
+			}
+		}
+		int interval = 2;	// 在附近取两个点。
+		int va = (minIdx - interval - startPosNext + numPointsNext) % numPointsNext + startPosNext;
+		int vb = (minIdx + interval - startPosNext + numPointsNext) % numPointsNext + startPosNext;
+		int vc;
+
+		// 然后再在当前笔画附近找几个点，最后判断三角形。
+		int *pointDist = new int[numPoints];
+		for (int j = 0; j < numPoints; j++)	pointDist[j] = infinity;
+		auto comparePoints = [=](int a, int b){ return pointDist[a - startPos] > pointDist[b - startPos] ; };
+		priority_queue<int, vector<int>, decltype(comparePoints)> candidatePoints(comparePoints);
+		for (int j = startPos; j <= endPos; j++){
+			Point diff = center - pointSet[j];
+			pointDist[j - startPos] = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
+			candidatePoints.push(j);
+		}
+		delete[] pointDist;
+ 		while (!candidatePoints.empty()){
+			vc = candidatePoints.top();
+			candidatePoints.pop();
+			bool ok = checkTriangle(pointSet[va], pointSet[vb], pointSet[vc]);
+			if (ok){
+				connectTri.push_back(Triangle(va, vb, vc));
+				break;
+			}
+		}
+	}
+	return connectTri;
 }

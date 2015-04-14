@@ -5,8 +5,10 @@
 
 using namespace std;
 using namespace cv;
+using namespace FM;
 
-Mat fillHoles(Mat imInput);
-vector< vector<bool> > getCorners(const Mat& mat, FM::PointSet& outputCorners = FM::PointSet());
+Mat fillHoles(Mat& imInput);
+vector< vector<bool> > getCorners(const Mat& mat, PointSet& outputCorners = PointSet());
 Point findStartPoint(const Mat& mat);
-vector< vector<int> > getPolygon(Mat mat, Point start, FM::PointSet& polygon);
+vector< vector<int> > getPolygon(Mat mat, Point start, PointSet& polygon);
+TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVertex);

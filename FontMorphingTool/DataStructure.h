@@ -9,7 +9,7 @@ namespace FM {
 
 	typedef std::vector<cv::Point> PointSet;
 
-	typedef struct Triangle {
+	struct Triangle {
 	public:
 		int va;
 		int vb;
@@ -18,7 +18,7 @@ namespace FM {
 		Triangle(int a, int b, int c){
 			va = a; vb = b; vc = c;
 		}
-	} Triangle;
+	};	// C++中不需要显式typedef一个结构体。 4.14
 	typedef std::vector<Triangle> TriMesh;
 
 

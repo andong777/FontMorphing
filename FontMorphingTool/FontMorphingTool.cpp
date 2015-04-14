@@ -15,7 +15,8 @@
 #include "PointsPlotDisplayService.h"
 #include "MeshPlotDisplayService.h"
 #include "Utility.h"
-
+#include <queue>
+#include <functional>
 #define CPD_FROM_FILE
 
 using namespace FM;
@@ -29,7 +30,6 @@ int numSample = 8;
 int numStroke;
 CharacterImage sourceChar;
 CharacterImage targetChar;
-TriMesh connectTri;
 TriMesh triMesh;
 vector<int> strokeEndAtVertex;
 PointSet sourceCharVert;
@@ -51,22 +51,6 @@ void readCharactersData(){
 	}
 	sourceChar.setNumOfStroke(numStroke);
 	targetChar.setNumOfStroke(numStroke);
-	// read the vertex Number of connection triangles for all strokes in a given character %连接三角形所有顶点数（关键点）
-	f.open(templateCharPathPrefix + "\\" + charName + connTriSuffix);
-	if(f){
-		string line;
-		int cnt = 0;
-		while(getline(f, line)){
-			istringstream is(line);
-			int a, b, c;
-			is >> a >> b >> c;
-			Triangle t(a, b, c);
-			connectTri.push_back(t);
-			cnt++;
-		}
-		cout << "connectTri num: " << cnt << endl;
-		f.close();
-	}
 
 	// show the character 1
 	Mat sourceCharImage = imread(sourceCharPath + "_R.bmp");
@@ -170,6 +154,13 @@ void getTemplateFromSourceCharacter(){
 		int currentX = startPoint.x, currentY = startPoint.y;
 		cout << "initial point = (" << currentX << ", " << currentY << ")" << endl;
 		getPolygon(edge, startPoint, polygon);
+		/*for (int i = 0; i < polygon.size(); i++){
+			Point p = polygon[i];
+			p.x += offsetX;
+			p.y += offsetY;
+			circle(rgb, p, 1, Scalar(0, 0, 0), CV_FILLED);
+		}
+		imshow("polygon", rgb); waitKey();*/
 
 		double sampleInterval = 100.;	// 每两个关键点间的大致距离
 		int numKeyPoints = floor(polygon.size() / sampleInterval);	// 根据上面距离，求出关键点个数，即采样段的个数
@@ -255,12 +246,17 @@ void getTemplateFromSourceCharacter(){
 	for (int i = 0; i < numStroke; i++){
 		cout << "stroke " << i << " ends at vertex " << strokeEndAtVertex[i] << endl;
 	}
-
-	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
-	cout << "There are " << triMesh.size() << " triangles in source character." << endl;
+	// get the connection triangles.
 	DisplayService *plot = new MeshPlotDisplayService(triMesh, sourceCharVert);
 	plot->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
+	plot->doDisplay();
+	TriMesh connectTri = getConnectTri(sourceCharVert, strokeEndAtVertex);
+	cout << "There are " << connectTri.size() << " connection triangles in source character." << endl;
+	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
+	cout << "There are " << triMesh.size() << " triangles in source character." << endl;
+	plot = new MeshPlotDisplayService(connectTri, sourceCharVert);
+	plot->setDisplay("source", Size(0, 0), rgb, Scalar(0, 255, 0));
 	plot->doDisplay();
 	delete plot;
 }
