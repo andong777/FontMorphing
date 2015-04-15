@@ -13,15 +13,34 @@ Mat fillHoles(Mat& imInput){
 	Mat imShow = Mat::zeros(imInput.size(), CV_8UC3);    // for show result
 	vector<PointSet > contours;
 	vector<Vec4i> hierarchy;
-	findContours(imInput, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+	findContours(imInput, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
 	for (int idx = 0; idx < contours.size(); idx++){
-		drawContours(imShow, contours, idx, Scalar::all(255), CV_FILLED, 8);
+		drawContours(imShow, contours, idx, Scalar::all(255), CV_FILLED);
 	}
 	Mat imFilledHoles;
 	cvtColor(imShow, imFilledHoles, CV_BGR2GRAY);
-	imFilledHoles = imFilledHoles > 0;
+	//imshow("", imFilledHoles); waitKey();
+	//imFilledHoles = imFilledHoles > 0;
 	imShow.release();
 	return imFilledHoles;
+}
+
+Mat getEdge(Mat& mat)
+{
+	Mat filled = fillHoles(mat);
+	//GaussianBlur(filled, filled, Size(0, 0), 2);
+	Mat edge = Mat::zeros(filled.size(), CV_8UC3);    // for show result
+	vector<PointSet> contours;
+	vector<Vec4i> hierarchy;
+	findContours(filled, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
+	vector<PointSet> contoursSmoothed(contours.size());
+	for (int i = 0; i < contours.size(); i++){
+		approxPolyDP(contours[i], contoursSmoothed[i], 3, true);
+		drawContours(edge, contoursSmoothed, i, Scalar::all(255), 1);
+	}
+	cvtColor(edge, edge, CV_BGR2GRAY);
+	//imwrite("edge.jpg", edge);
+	return edge;
 }
 
 vector< vector<bool> > getCorners(const Mat& mat, PointSet& outputCorners){
@@ -139,7 +158,7 @@ bool checkTriangle(const Point& a, const Point& b, const Point& c)
 	float va2vc = sqrt((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y) + .0);
 	float minEdge = min(min(va2vb, vb2vc), va2vc);
 	float maxEdge = max(max(va2vb, vb2vc), va2vc);
-	if (maxEdge / minEdge >= 5){	// 过于瘦高
+	if (maxEdge / minEdge >= 10){	// 过于瘦高
 		return false;
 	}
 	float twoEdges = va2vb + vb2vc + va2vc - maxEdge;
@@ -151,6 +170,7 @@ bool checkTriangle(const Point& a, const Point& b, const Point& c)
 
 TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVertex)
 {
+	// todo: 可以改为寻找最近的笔画构造连接三角形而不是下一个笔画
 	int numStroke = strokeEndAtVertex.size();
 	TriMesh connectTri;
 

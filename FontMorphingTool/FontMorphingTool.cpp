@@ -132,9 +132,7 @@ void getTemplateFromSourceCharacter(){
 				largerStrokeImg.at<uchar>(i+5, j+5) = 255 - strokeImg.at<uchar>(i, j);
 			}
 		}
- 		Mat filled = fillHoles(largerStrokeImg);
-		Mat edge;	// 边缘检测得到的矩阵，边缘为白色。
-		Canny(filled, edge, 40, 120);	// Canny方法输出灰度矩阵
+		Mat edge = getEdge(largerStrokeImg);	// 边缘检测得到的矩阵，边缘为白色。
 
 		PointSet corners;
 		vector< vector<bool> > cornerFlag = getCorners(edge, corners);
@@ -160,7 +158,7 @@ void getTemplateFromSourceCharacter(){
 			p.y += offsetY;
 			circle(rgb, p, 1, Scalar(0, 0, 0), CV_FILLED);
 		}
-		imshow("polygon", rgb); waitKey();*/
+		imshow("source", rgb); waitKey();*/
 
 		double sampleInterval = 100.;	// 每两个关键点间的大致距离
 		int numKeyPoints = floor(polygon.size() / sampleInterval);	// 根据上面距离，求出关键点个数，即采样段的个数
@@ -295,9 +293,7 @@ void registerPointSetToTargetCharacter(){
 				largerStrokeImg.at<uchar>(i + 5, j + 5) = 255 - strokeImg.at<uchar>(i, j);
 			}
 		}
-		Mat filled = fillHoles(largerStrokeImg);
-		Mat edge;	// 边缘检测得到的矩阵，边缘为白色。
-		Canny(filled, edge, 40, 120);	// Canny方法输出灰度矩阵
+		Mat edge = getEdge(largerStrokeImg);
 
 		// find corner points on the contour
 		PointSet corners;
@@ -397,6 +393,13 @@ void registerPointSetToTargetCharacter(){
 			keyPoints[i].y -= offsetY;
 		}
 		vector< vector<int> > orderAtThisPoint = getPolygon(edge, keyPoints[0], polygon);	// 记录点在多边形上的顺序
+		for (int i = 0; i < polygon.size(); i++){
+			Point p = polygon[i];
+			p.x += offsetX;
+			p.y += offsetY;
+			circle(rgb, p, 1, Scalar(0, 0, 0), CV_FILLED);
+		}
+		imshow("target", rgb); waitKey();
 
 		PointSet samplePoints;	// 采样后得到的点
 		for (int i = 0; i<keyPoints.size(); i++){

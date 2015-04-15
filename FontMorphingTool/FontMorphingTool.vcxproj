@@ -101,6 +101,7 @@
     <ClCompile Include="FontMorphingTool.cpp" />
     <ClCompile Include="MeshPlotDisplayService.cpp" />
     <ClCompile Include="PointsPlotDisplayService.cpp" />
+    <ClCompile Include="Test.cpp" />
     <ClCompile Include="Utility.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
