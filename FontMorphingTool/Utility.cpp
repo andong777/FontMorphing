@@ -238,6 +238,7 @@ PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& corner
 {
 	PointSet samplePoints;
 	int numKeyPoints = floor(polygon.size() / keyPointsInterval);	// 根据关键点之间距离，求出关键点个数，即采样段的个数
+	if (numKeyPoints == 0)	numKeyPoints = 1;	// 对不足一个区间的当作一个区间处理 4.16
 	double extraInterval = polygon.size() - keyPointsInterval * numKeyPoints;	// 划分后多余的长度，被均分到每个采样段中
 	keyPointsInterval += extraInterval / numKeyPoints;
 	double sampleStep = keyPointsInterval / numSample;	// 每个采样段中，两个普通点之间的距离
@@ -268,10 +269,6 @@ PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& corner
 	PointSet samplePoints;
 	// 修改后的采样方法要求将关键点从小到大排好序
 	std::sort(keyPoints.begin(), keyPoints.end(), [=](const Point & a, const Point & b) -> bool { return orderAtThisPoint[a.y][a.x] < orderAtThisPoint[b.y][b.x]; });
-	for (int i = 0; i < keyPoints.size(); i++){
-		Point &p = keyPoints[i];
-		cout << "order: " << orderAtThisPoint[p.y][p.x] << endl;
-	}
 
 	for (int i = 0; i < keyPoints.size(); i++){
 		int i2 = (i + 1) % keyPoints.size();	// 下一个关键点
@@ -280,6 +277,7 @@ PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& corner
 		int kp2Order = orderAtThisPoint[keyPoints[i2].y][keyPoints[i2].x];
 		assert(kp1Order >= 0 && kp2Order >= 0);
 		int dist = (kp2Order + polygon.size() - kp1Order) % polygon.size();
+		if (dist == 0)	dist = polygon.size();	// 对只有一个关键点的情况特殊处理 4.16
 		double numIntervalPoints = double(dist / numSample);
 		for (int j = 1; j < numSample; j++){
 			int index = floor(fmod(kp1Order + numIntervalPoints * j + polygon.size(), polygon.size()));
