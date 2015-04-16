@@ -172,42 +172,69 @@ bool checkTriangle(const Point& a, const Point& b, const Point& c)
 
 TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVertex)
 {
-	// todo: 可以改为寻找最近的笔画构造连接三角形而不是下一个笔画
-	int numStroke = strokeEndAtVertex.size();
 	TriMesh connectTri;
-
-	// stub
-	/*connectTri.push_back(Triangle(35, 36, 137));
-	connectTri.push_back(Triangle(171, 173, 75));*/
-
-	for (int i = 0; i < numStroke - 1; i++){
-		int startPos = i == 0 ? 0 : strokeEndAtVertex[i - 1] + 1;
+	int numStroke = strokeEndAtVertex.size();
+	PointSet strokeCenter(numStroke);
+	bool **connected = new bool*[numStroke];
+	for (int i = 0; i < numStroke; i++){
+		connected[i] = new bool[numStroke];
+	}
+	for (int i = 0; i < numStroke; i++){
+		for (int j = 0; j < numStroke; j++){
+			connected[i][j] = false;
+		}
+	}
+	for (int i = 0; i < numStroke; i++){
+		int startPos = (i == 0 ? 0 : strokeEndAtVertex[i - 1] + 1);
 		int endPos = strokeEndAtVertex[i];
 		int numPoints = endPos - startPos + 1;
-		Point center(0, 0);	// 当前笔画的重心
+		Point center(0, 0);
 		for (int j = startPos; j <= endPos; j++){
 			center += pointSet[j];
 		}
 		center.x /= numPoints;
 		center.y /= numPoints;
+		strokeCenter[i] = center;
+	}
 
-		// 找出下个笔画上离当前笔画重心最近的点。
-		int minIdx = -1;
-		int minDist = infinity;
-		int startPosNext = strokeEndAtVertex[i] + 1;
-		int endPosNext = strokeEndAtVertex[i + 1];
-		int numPointsNext = endPosNext - startPosNext + 1;
-		for (int j = startPosNext; j <= endPosNext; j++){
+	for (int i = 0; i < numStroke; i++){
+		int startPos = (i == 0 ? 0 : strokeEndAtVertex[i - 1] + 1);
+		int endPos = strokeEndAtVertex[i];
+		int numPoints = endPos - startPos + 1;
+		Point& center = strokeCenter[i];
+
+		int minStrokeIdx = -1;
+		float minStrokeDist = infinity;
+		for (int j = 0; j < numStroke; j++){
+			if (j != i && !connected[i][j]){
+				Point diff = center - strokeCenter[j];
+				float dist = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
+				if (dist < minStrokeDist){
+					minStrokeDist = dist;
+					minStrokeIdx = j;
+				}
+			}
+		}
+		connected[i][minStrokeIdx] = true;
+		connected[minStrokeIdx][i] = true;
+
+		// 找出这个笔画上离当前笔画重心最近的点。
+		int startPosThis = (minStrokeIdx == 0 ? 0 : strokeEndAtVertex[minStrokeIdx - 1] + 1);
+		int endPosThis = strokeEndAtVertex[minStrokeIdx];
+		int numPointsThis = endPosThis - startPosThis + 1;
+		int minPointIdx = -1;
+		float minPointDist = infinity;
+		for (int j = startPosThis; j <= endPosThis; j++){
 			Point diff = center - pointSet[j];
-			int dist = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
-			if (dist < minDist){
-				minDist = dist;
-				minIdx = j;
+			float dist = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
+			if (dist < minPointDist){
+				minPointDist = dist;
+				minPointIdx = j;
 			}
 		}
 		int interval = 2;	// 在附近取两个点。
-		int va = (minIdx - interval - startPosNext + numPointsNext) % numPointsNext + startPosNext;
-		int vb = (minIdx + interval - startPosNext + numPointsNext) % numPointsNext + startPosNext;
+		int va = (minPointIdx - interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
+		int vb = (minPointIdx + interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
 		int vc;
 
 		// 然后再在当前笔画附近找几个点，最后判断三角形。
@@ -231,6 +258,10 @@ TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVe
 			}
 		}
 	}
+	for (int i = 0; i < numStroke; i++){
+		delete[] connected[i];
+	}
+	delete[] connected;
 	return connectTri;
 }
 
