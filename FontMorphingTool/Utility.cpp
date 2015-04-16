@@ -159,12 +159,14 @@ bool checkTriangle(const Point& a, const Point& b, const Point& c)
 	float minEdge = min(min(va2vb, vb2vc), va2vc);
 	float maxEdge = max(max(va2vb, vb2vc), va2vc);
 	if (maxEdge / minEdge >= 10){	// 过于瘦高
+		cout << "too thin" << endl;
 		return false;
 	}
 	float twoEdges = va2vb + vb2vc + va2vc - maxEdge;
-	if (maxEdge / twoEdges >= 0.9){	// 过于矮胖
-		return false;
-	}
+	//if (maxEdge / twoEdges >= 0.95){	// 过于矮胖	// 是否会出现这种情况？因为有两个点是挨得比较近的。 4.15
+	//	cout << "too short" << endl;
+	//	return false;
+	//}
 	return true;
 }
 
@@ -230,4 +232,99 @@ TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVe
 		}
 	}
 	return connectTri;
+}
+
+PointSet getSamplePoints(const PointSet& polygon, const vector< vector<bool> >& cornerFlag, double keyPointsInterval, int numSample)
+{
+	PointSet samplePoints;
+	int numKeyPoints = floor(polygon.size() / keyPointsInterval);	// 根据关键点之间距离，求出关键点个数，即采样段的个数
+	double extraInterval = polygon.size() - keyPointsInterval * numKeyPoints;	// 划分后多余的长度，被均分到每个采样段中
+	keyPointsInterval += extraInterval / numKeyPoints;
+	double sampleStep = keyPointsInterval / numSample;	// 每个采样段中，两个普通点之间的距离
+	for (int i = 0; i < numKeyPoints; i++){
+		double basePosition = keyPointsInterval * i;
+		for (int j = 0; j < numSample; j++){
+			int pointIndex = floor(basePosition + sampleStep * j);
+			samplePoints.push_back(polygon[pointIndex]);
+			// replace regular sample points by the corner points
+			for (int p = 1; p <= sampleStep - 1; p++){
+				int index = floor(fmod(basePosition + sampleStep * (j - .5) + p + polygon.size(), polygon.size()));
+				Point pnt = polygon[index];
+				if (cornerFlag[pnt.y][pnt.x]){
+					cout << "replace corner (" << pnt.x << ", " << pnt.y << ")" << endl;
+					//cornerFlag[pnt.y][pnt.x] = false;
+					samplePoints.pop_back();
+					samplePoints.push_back(pnt);
+					break;
+				}
+			}
+		}
+	}
+	return samplePoints;
+}
+
+PointSet getSamplePoints(const PointSet& polygon, const vector< vector<bool> >& cornerFlag, const PointSet& keyPoints, const vector< vector<int> >& orderAtThisPoint, int numSample)
+{
+	PointSet samplePoints;
+	for (int i = 0; i<keyPoints.size(); i++){
+		int i2 = (i + 1) % keyPoints.size();	// 下一个关键点
+		samplePoints.push_back(keyPoints[i]);
+		int kp1Order = orderAtThisPoint[keyPoints[i].y][keyPoints[i].x];
+		int kp2Order = orderAtThisPoint[keyPoints[i2].y][keyPoints[i2].x];
+		if (kp1Order < 0 || kp2Order < 0){
+			cout << "some key points are off the polygon." << endl;
+			break;
+		}
+		int dist = abs(kp1Order - kp2Order);
+		if ((polygon.size() - dist) >= dist){	// 小圈
+			double numIntervalPoints = double(dist) / numSample;	// 中间插点的间隔
+			if (kp1Order > kp2Order)	numIntervalPoints *= -1;
+			for (int j = 1; j < numSample; j++){
+				int index = floor(kp1Order + numIntervalPoints * j);
+				samplePoints.push_back(polygon[index]);
+				// replace regular sample points by the corner points
+				int startPos, endPos;	// to let startPos < endPos
+				if (kp1Order < kp2Order){	// 点1 -> 点2
+					startPos = floor(kp1Order + numIntervalPoints * (j - .5) + 1);	// notice the number '1', which means it's an exclusive interval. 3.28
+					endPos = floor(kp1Order + numIntervalPoints * (j + .5) - 1);	// shorten the search interval. 4.13
+				}
+				else{	// 点2 -> 点1
+					startPos = floor(kp1Order + numIntervalPoints * (j + .5) + 1);
+					endPos = floor(kp1Order + numIntervalPoints * (j - .5) - 1);
+				}
+				for (int p = startPos; p <= endPos; p++){
+					Point pnt = polygon[p];
+					if (cornerFlag[pnt.y][pnt.x]){
+						cout << "小圈 replace corner (" << pnt.x << ", " << pnt.y << ")" << endl;
+						//cornerFlag[pnt.y][pnt.x] = false;
+						samplePoints.pop_back();
+						samplePoints.push_back(pnt);
+						break;
+					}
+				}
+			}
+		}
+		else{	// 大圈
+			double numIntervalPoints = double(polygon.size() - dist) / numSample;
+			if (kp1Order < kp2Order)	numIntervalPoints *= -1;	// 注意这里是小于而不是大于
+			int step = numIntervalPoints / abs(numIntervalPoints);	// +1 or -1
+			for (int j = 1; j<numSample; j++){
+				int index = floor(fmod(kp1Order + numIntervalPoints*j + polygon.size(), polygon.size())); // notice the detail
+				samplePoints.push_back(polygon[(index + polygon.size()) % polygon.size()]);
+				// replace regular sample points by the corner points
+				for (int p = 1; p <= floor(abs(numIntervalPoints)) - 1; p++){
+				index = floor(fmod(kp1Order + numIntervalPoints*(j - .5) + p*step + polygon.size(), polygon.size()));
+				Point pnt = polygon[(index + polygon.size()) % polygon.size()];
+				if (cornerFlag[pnt.y][pnt.x]){
+				cout << "大圈 replace corner (" << pnt.x << ", " << pnt.y << ")" << endl;
+				//cornerFlag[pnt.y][pnt.x] = false;
+				samplePoints.pop_back();
+				samplePoints.push_back(pnt);
+				break;
+				}
+				}
+			}
+		}
+	}
+	return samplePoints;
 }

@@ -85,22 +85,24 @@
     <None Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ARAPMorphingService.h" />
+    <ClInclude Include="ARAPMorphing.h" />
+    <ClInclude Include="CharacterDisplay.h" />
     <ClInclude Include="CharacterImage.h" />
     <ClInclude Include="Constant.h" />
     <ClInclude Include="DataStructure.h" />
-    <ClInclude Include="MeshPlotDisplayService.h" />
+    <ClInclude Include="MeshDisplay.h" />
     <ClInclude Include="MorphingService.h" />
     <ClInclude Include="DisplayService.h" />
-    <ClInclude Include="PointsPlotDisplayService.h" />
+    <ClInclude Include="PointsDisplay.h" />
     <ClInclude Include="Utility.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ARAPMorphingService.cpp" />
+    <ClCompile Include="ARAPMorphing.cpp" />
+    <ClCompile Include="CharacterDisplay.cpp" />
     <ClCompile Include="CharacterImage.cpp" />
     <ClCompile Include="FontMorphingTool.cpp" />
-    <ClCompile Include="MeshPlotDisplayService.cpp" />
-    <ClCompile Include="PointsPlotDisplayService.cpp" />
+    <ClCompile Include="MeshDisplay.cpp" />
+    <ClCompile Include="PointsDisplay.cpp" />
     <ClCompile Include="Test.cpp" />
     <ClCompile Include="Utility.cpp" />
   </ItemGroup>

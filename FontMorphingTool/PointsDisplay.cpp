@@ -1,17 +1,17 @@
-#include "PointsPlotDisplayService.h"
+#include "PointsDisplay.h"
 
-PointsPlotDisplayService::PointsPlotDisplayService(PointSet points, int pointSize, bool filled)
+PointsDisplay::PointsDisplay(PointSet points, int pointSize, bool filled)
 {
 	this->points = points;
 	this->pointSize = pointSize;
 	this->filled = filled;
 }
 
-PointsPlotDisplayService::~PointsPlotDisplayService()
+PointsDisplay::~PointsDisplay()
 {
 }
 
-void PointsPlotDisplayService::doDisplay()
+void PointsDisplay::doDisplay()
 {
 	cout << points.size() << " points in " << title << "." << endl;
 	for (int i = 0; i < points.size(); i++){

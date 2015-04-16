@@ -4,15 +4,15 @@
 #define SHOW_DETAILS
 using namespace FM;
 
-class MeshPlotDisplayService : public DisplayService
+class MeshDisplay : public DisplayService
 {
 private:
 	TriMesh mesh;
 	PointSet points;
 
 public:
-	MeshPlotDisplayService(TriMesh mesh, PointSet points);
-	~MeshPlotDisplayService();
+	MeshDisplay(TriMesh mesh, PointSet points);
+	~MeshDisplay();
 	void doDisplay();
 };
 

@@ -4,62 +4,35 @@
 
 CharacterImage::CharacterImage()
 {
-	strokeBox = NULL;
-}
-
-CharacterImage::CharacterImage(int numStroke)
-{
-	setNumOfStroke(numStroke);
 }
 
 CharacterImage::~CharacterImage()
 {
-	delete[] strokeBox;
 }
 
-void CharacterImage::setNumOfStroke(int numStroke)
+void CharacterImage::setChar(Mat& image, Rect box)
 {
-	delete[] strokeBox;
-	this->numStroke = numStroke;
-	strokeBox = new int[numStroke][4];
+	charImage = image;
+	charBox = box;
 }
 
-void CharacterImage::setCharBox(int box[4])
+void CharacterImage::addStroke(Mat& image, Rect box)
 {
-	std::copy(box, box + 4, charBox);
+	strokeImage.push_back(image);
+	strokeBox.push_back(box);
 }
 
-void CharacterImage::setStrokeBox(int no, int box[4])
+Size CharacterImage::getCharSize()
 {
-	std::copy(box, box + 4, strokeBox[no]);
+	return charBox.size();
 }
 
-int CharacterImage::getCharHeight()
+Size CharacterImage::getStrokeSize(int no)
 {
-	return charBox[3] - charBox[1];
+	return strokeBox.at(no).size();
 }
 
-int CharacterImage::getCharWidth()
+Point CharacterImage::getStrokeOffset(int no)
 {
-	return charBox[2] - charBox[0];
-}
-
-int CharacterImage::getStrokeHeight(int no)
-{
-	return strokeBox[no][3] - strokeBox[no][1];
-}
-
-int CharacterImage::getStrokeWidth(int no)
-{
-	return strokeBox[no][2] - strokeBox[no][0];
-}
-
-int CharacterImage::getStrokeOffsetX(int no)
-{
-	return strokeBox[no][0] - charBox[0];
-}
-
-int CharacterImage::getStrokeOffsetY(int no)
-{
-	return strokeBox[no][1] - charBox[1];
+	return strokeBox.at(no).tl() - charBox.tl();
 }

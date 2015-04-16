@@ -27,22 +27,25 @@
     <ClInclude Include="DataStructure.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="ARAPMorphingService.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="DisplayService.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="PointsPlotDisplayService.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Utility.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="MeshPlotDisplayService.h">
+    <ClInclude Include="CharacterImage.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="CharacterImage.h">
+    <ClInclude Include="MeshDisplay.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ARAPMorphing.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="PointsDisplay.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CharacterDisplay.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -50,22 +53,25 @@
     <ClCompile Include="FontMorphingTool.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="ARAPMorphingService.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="PointsPlotDisplayService.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="Utility.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="MeshPlotDisplayService.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CharacterImage.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="Test.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="MeshDisplay.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="PointsDisplay.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ARAPMorphing.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CharacterDisplay.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

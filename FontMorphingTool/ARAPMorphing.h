@@ -5,7 +5,7 @@
 
 using namespace FM;
 
-class ARAPMorphingService : public MorphingService, public DisplayService
+class ARAPMorphing : public MorphingService, public DisplayService
 {
 private:
 	std::vector<PointSet> pointSets;
@@ -14,8 +14,8 @@ private:
 	TriMesh mesh;
 
 public:
-	ARAPMorphingService();
-	~ARAPMorphingService();
+	ARAPMorphing();
+	~ARAPMorphing();
 	void doMorphing(PointSet source, PointSet target, TriMesh mesh, int numStep);
 	void doDisplay();
 	PointSet getPointSetByStepIndex(int stepIndex);

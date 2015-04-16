@@ -1,24 +1,25 @@
 #pragma once
+#include "opencv2/highgui/highgui.hpp"
+
+using namespace cv;
+
 class CharacterImage
 {
 private:
-	int numStroke;
-	int charBox[4];
-	int (*strokeBox)[4];
+	Rect charBox;
+	vector<Rect> strokeBox;
 
 public:
+	Mat charImage;
+	std::vector<Mat> strokeImage;
+
 	CharacterImage();
-	CharacterImage(int numStroke);
 	~CharacterImage();
 
-	void setNumOfStroke(int numStroke);
-	void setCharBox(int box[4]);
-	void setStrokeBox(int no, int box[4]);	// starts from 0, take care.
+	void setChar(Mat& image, Rect box);
+	void addStroke(Mat& image, Rect box);
 
-	int getCharHeight();
-	int getCharWidth();
-	int getStrokeHeight(int no);
-	int getStrokeWidth(int no);
-	int getStrokeOffsetX(int no);
-	int getStrokeOffsetY(int no);
+	Size getCharSize();
+	Size getStrokeSize(int no);	// starts from 0, take care.
+	Point getStrokeOffset(int no);
 };

@@ -1,20 +1,20 @@
-#include "ARAPMorphingService.h"
-#include "MeshPlotDisplayService.h"
+#include "ARAPMorphing.h"
+#include "MeshDisplay.h"
 
 using namespace std;
 using namespace FM;
 
 #define SHOW_DETAILS
 
-ARAPMorphingService::ARAPMorphingService()
+ARAPMorphing::ARAPMorphing()
 {
 }
 
-ARAPMorphingService::~ARAPMorphingService()
+ARAPMorphing::~ARAPMorphing()
 {
 }
 
-void ARAPMorphingService::doMorphing(PointSet source, PointSet target, TriMesh mesh, int numStep)
+void ARAPMorphing::doMorphing(PointSet source, PointSet target, TriMesh mesh, int numStep)
 {
 	// todo: 这只是临时的丑陋做法，后面一定要改成从0开始的！
 	// 准备数据。
@@ -143,7 +143,7 @@ void ARAPMorphingService::doMorphing(PointSet source, PointSet target, TriMesh m
 	this->mesh = mesh;
 }
 
-void ARAPMorphingService::doDisplay()
+void ARAPMorphing::doDisplay()
 {
 	for (int i = 0; i < pointSets.size(); i++){
 		cout << "step: " << i << " / " << pointSets.size() - 1 << endl;
@@ -151,7 +151,7 @@ void ARAPMorphingService::doDisplay()
 		ostringstream osss;
 		osss << "step: " << i << " / " << pointSets.size() - 1;
 		putText(canvas, osss.str(), Point(250, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 0));
-		DisplayService *plot = new MeshPlotDisplayService(mesh, pointSets[i]);
+		DisplayService *plot = new MeshDisplay(mesh, pointSets[i]);
 		plot->setDisplay("morphing", Size(0, 0), canvas, color);
 		plot->doDisplay();
 		delete plot;
@@ -162,7 +162,7 @@ void ARAPMorphingService::doDisplay()
 	}
 }
 
-PointSet ARAPMorphingService::getPointSetByStepIndex(int stepIndex)
+PointSet ARAPMorphing::getPointSetByStepIndex(int stepIndex)
 {
 	return pointSets.at(stepIndex);
 }

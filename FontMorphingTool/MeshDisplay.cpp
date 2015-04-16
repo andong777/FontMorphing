@@ -1,18 +1,18 @@
-#include "MeshPlotDisplayService.h"
+#include "MeshDisplay.h"
 
 
-MeshPlotDisplayService::MeshPlotDisplayService(TriMesh mesh, PointSet points)
+MeshDisplay::MeshDisplay(TriMesh mesh, PointSet points)
 {
 	this->mesh = mesh;
 	this->points = points;
 }
 
 
-MeshPlotDisplayService::~MeshPlotDisplayService()
+MeshDisplay::~MeshDisplay()
 {
 }
 
-void MeshPlotDisplayService::doDisplay()
+void MeshDisplay::doDisplay()
 {
 	for (int j = 0; j < mesh.size(); j++){
 #ifdef SHOW_DETAILS

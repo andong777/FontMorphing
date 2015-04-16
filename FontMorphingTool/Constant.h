@@ -6,7 +6,7 @@ using namespace std;
 
 static int infinity = numeric_limits<int>::max();
 
-static const string charName = "FM1";
+static const string charName = "FM3";
 static const string templateCharPathPrefix = "E:\\TestData\\PKU";
 static const string sourceCharPathPrefix = "E:\\TestData\\PKU\\HT";
 static const string targetCharPathPrefix = "E:\\TestData\\PKU\\LS";

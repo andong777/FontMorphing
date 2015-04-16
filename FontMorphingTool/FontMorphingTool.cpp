@@ -9,15 +9,16 @@
 #include <fstream>
 #include <stdlib.h>
 #include <vector>
+#include <queue>
 #include "OriCPD.h"
 #include "Fade_2D.h"
-#include "ARAPMorphingService.h"
-#include "PointsPlotDisplayService.h"
-#include "MeshPlotDisplayService.h"
 #include "Utility.h"
-#include <queue>
-#include <functional>
-#define CPD_FROM_FILE
+#include "ARAPMorphing.h"
+#include "PointsDisplay.h"
+#include "MeshDisplay.h"
+#include "CharacterDisplay.h"
+
+//#define CPD_FROM_FILE
 
 using namespace FM;
 using namespace cv;
@@ -49,27 +50,27 @@ void readCharactersData(){
 		cout << "numStroke: " << numStroke << endl;
 		f.close();
 	}
-	sourceChar.setNumOfStroke(numStroke);
-	targetChar.setNumOfStroke(numStroke);
 
 	// show the character 1
 	Mat sourceCharImage = imread(sourceCharPath + "_R.bmp");
 	imshow("source", sourceCharImage); waitKey();
 	// read the coordinates of the bounding box for a character 视图，骨架边界？
-	int sourceCharBox[4];
+	int x1, y1, x2, y2;
 	f.open(sourceCharPath + charBoxSuffix);
 	if (f){
-		for (int i = 0; i < 4; i++)	f >> sourceCharBox[i];
+		f >> x1 >> y1 >> x2 >> y2;
 		f.close();
 	}
-	sourceChar.setCharBox(sourceCharBox);
+	sourceChar.setChar(sourceCharImage, Rect(Point(x1, y1), Point(x2, y2)));
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(sourceCharPath + strokeBoxSuffix);
 	if (f){
 		for (int i = 0; i < numStroke; i++){
-			int strokeBox[4];
-			for (int j = 0; j < 4; j++)	f >> strokeBox[j];
-			sourceChar.setStrokeBox(i, strokeBox);
+			ostringstream os;
+			os << sourceCharPath << "_" << (i + 1) << ".bmp";
+			Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
+			f >> x1 >> y1 >> x2 >> y2;
+			sourceChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
 		}
 		f.close();
 	}
@@ -78,55 +79,39 @@ void readCharactersData(){
 	Mat targetCharImage = imread(targetCharPath + "_R.bmp");
 	imshow("target", targetCharImage); waitKey();
 	// read the coordinates of the bounding box for a character 视图，骨架边界？
-	int targetCharBox[4];
 	f.open(targetCharPath + charBoxSuffix);
 	if (f){
-		for (int i = 0; i<4; i++)	f >> targetCharBox[i];
+		f >> x1 >> y1 >> x2 >> y2;
 		f.close();
 	}
-	targetChar.setCharBox(targetCharBox);
+	targetChar.setChar(targetCharImage, Rect(Point(x1, y1), Point(x2, y2)));
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(targetCharPath + strokeBoxSuffix);
 	if (f){
 		for (int i = 0; i < numStroke; i++){
-			int strokeBox[4];
-			for (int j = 0; j < 4; j++)	f >> strokeBox[j];
-			targetChar.setStrokeBox(i, strokeBox);
+			ostringstream os;
+			os << targetCharPath << "_" << (i + 1) << ".bmp";
+			Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
+			f >> x1 >> y1 >> x2 >> y2;
+			targetChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
 		}
 		f.close();
 	}
 }
 
 void getTemplateFromSourceCharacter(){
-	// generate the source character by assembling its strokes
-	int imgH = sourceChar.getCharHeight() + 10;
-	int imgW = sourceChar.getCharWidth() + 10;
-	Mat rgb(imgH, imgW, CV_8UC3, Scalar(255, 255, 255));
-	for(int no = 0;no < numStroke; no++){
-		int offsetX = sourceChar.getStrokeOffsetX(no) + 5;
-		int offsetY = sourceChar.getStrokeOffsetY(no) + 5;
-		ostringstream os;
-		os << sourceCharPath << "_" << (no+1) << ".bmp";
-		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
-		for(int h=0;h<strokeImg.rows;h++){
-			for(int w=0;w<strokeImg.cols;w++){
-				uchar v = strokeImg.at<uchar>(h, w);
-				if(v < 128){	// if black
-					rgb.at<Vec3b>(h+offsetY, w+offsetX) = Vec3b(0, 0, 0);
-				}
-			}
-		}
-	}
+	Mat rgb(sourceChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
+	DisplayService *display = new CharacterDisplay(sourceChar);
+	display->setDisplay("source", Size(0, 0), rgb, Scalar(0, 0, 0));
+	display->doDisplay();
+	delete display;
 
 	strokeEndAtVertex.resize(numStroke, 0);
 	for(int no = 0; no < numStroke; no++){
 		cout << "processing stroke "<<no<<endl;
-		int offsetX = sourceChar.getStrokeOffsetX(no);
-		int offsetY = sourceChar.getStrokeOffsetY(no);
-		ostringstream os;
-		os << sourceCharPath << "_" << (no+1) << ".bmp";
-		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
-		Mat largerStrokeImg(strokeImg.size().height+10, strokeImg.size().width+10, CV_8UC1, Scalar(0));
+		Point offset = sourceChar.getStrokeOffset(no);
+		Mat& strokeImg = sourceChar.strokeImage.at(no);
+		Mat largerStrokeImg(strokeImg.size() + Size(10, 10), CV_8UC1, Scalar(0));
 		for(int i=0;i<strokeImg.rows;i++){
 			for(int j=0;j<strokeImg.cols;j++){
 				largerStrokeImg.at<uchar>(i+5, j+5) = 255 - strokeImg.at<uchar>(i, j);
@@ -137,13 +122,12 @@ void getTemplateFromSourceCharacter(){
 		PointSet corners;
 		vector< vector<bool> > cornerFlag = getCorners(edge, corners);
 		for (auto it = corners.begin(); it != corners.end(); it++){
-			(*it).x += offsetX;
-			(*it).y += offsetY;
+			(*it) += offset;
 		}
-		DisplayService *plt = new PointsPlotDisplayService(corners, 5);
-		plt->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
-		plt->doDisplay();
-		delete plt;
+		display = new PointsDisplay(corners, 5);
+		display->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
+		display->doDisplay();
+		delete display;
 
 		// contour line connection method
 		PointSet polygon;	//记录多边形上的点
@@ -160,41 +144,15 @@ void getTemplateFromSourceCharacter(){
 		}
 		imshow("source", rgb); waitKey();*/
 
-		double sampleInterval = 100.;	// 每两个关键点间的大致距离
-		int numKeyPoints = floor(polygon.size() / sampleInterval);	// 根据上面距离，求出关键点个数，即采样段的个数
-		double extraInterval = polygon.size() - sampleInterval * numKeyPoints;	// 划分后多余的长度，被均分到每个采样段中
-		sampleInterval += extraInterval / numKeyPoints;
-		double sampleStep = sampleInterval / numSample;	// 每个采样段中，两个普通点之间的距离
-		PointSet samplePoints;	// 采样后得到的点
-		for (int i = 0; i < numKeyPoints; i++){
-			double basePosition = sampleInterval * i;
-			for (int j = 0; j < numSample; j++){
-				int pointIndex = floor(basePosition + sampleStep * j);
-				samplePoints.push_back(polygon[pointIndex]);
-				// replace regular sample points by the corner points
-				for (int p = 1; p <= sampleStep - 1; p++){
-					int index = floor(fmod(basePosition + sampleStep * (j - .5) + p + polygon.size(), polygon.size()));
-					Point pnt = polygon[index];
-					if (cornerFlag[pnt.y][pnt.x]){
-						cout << "replace corner (" << pnt.x + offsetX << ", " << pnt.y + offsetY << ")" << endl;
-						cornerFlag[pnt.y][pnt.x] = false;
-						samplePoints.pop_back();
-						samplePoints.push_back(pnt);
-						break;
-					}
-				}
-			}
-		}
+		PointSet samplePoints = getSamplePoints(polygon, cornerFlag);
 		// Plot the polygon
 		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
-			Point *p = &samplePoints[i];
-			p->x += offsetX;
-			p->y += offsetY;
+			samplePoints[i] += offset;
 		}
-		DisplayService *plot = new PointsPlotDisplayService(samplePoints, 2, true);
-		plot->setDisplay("source", Size(0, 0), rgb);
-		plot->doDisplay();
-		delete plot;
+		display = new PointsDisplay(samplePoints, 2, true);
+		display->setDisplay("source", Size(0, 0), rgb);
+		display->doDisplay();
+		delete display;
 		for (int i = 0; i < samplePoints.size();i+=numSample){
 			circle(rgb, samplePoints[i], 5, Scalar(0, 0, 255));
 		}
@@ -246,47 +204,31 @@ void getTemplateFromSourceCharacter(){
 	}
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
 	// get the connection triangles.
-	DisplayService *plot = new MeshPlotDisplayService(triMesh, sourceCharVert);
-	plot->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
-	plot->doDisplay();
+	display = new MeshDisplay(triMesh, sourceCharVert);
+	display->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
+	display->doDisplay();
+	delete display;
 	TriMesh connectTri = getConnectTri(sourceCharVert, strokeEndAtVertex);
 	cout << "There are " << connectTri.size() << " connection triangles in source character." << endl;
 	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
 	cout << "There are " << triMesh.size() << " triangles in source character." << endl;
-	plot = new MeshPlotDisplayService(connectTri, sourceCharVert);
-	plot->setDisplay("source", Size(0, 0), rgb, Scalar(0, 255, 0));
-	plot->doDisplay();
-	delete plot;
+	display = new MeshDisplay(connectTri, sourceCharVert);
+	display->setDisplay("source", Size(0, 0), rgb, Scalar(0, 255, 0));
+	display->doDisplay();
+	delete display;
 }
 
 void registerPointSetToTargetCharacter(){
-	// generate the target character by assembling its strokes
-	int imgH = targetChar.getCharHeight() + 10;
-	int imgW = targetChar.getCharWidth() + 10;
-	Mat rgb(imgH, imgW, CV_8UC3, Scalar(255, 255, 255));
-	for (int no = 0; no < numStroke; no++){
-		int offsetX = targetChar.getStrokeOffsetX(no) + 5;
-		int offsetY = targetChar.getStrokeOffsetY(no) + 5;
-		ostringstream os;
-		os << targetCharPath << "_" << (no+1) << ".bmp";
-		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
-		for (int h = 0; h<strokeImg.rows; h++){
-			for (int w = 0; w<strokeImg.cols; w++){
-				uchar v = strokeImg.at<uchar>(h, w);
-				if (v < 128){	// if black
-					rgb.at<Vec3b>(h + offsetY, w + offsetX) = Vec3b(0, 0, 0);
-				}
-			}
-		}
-	}
+	Mat rgb(targetChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
+	DisplayService *display = new CharacterDisplay(targetChar);
+	display->setDisplay("target", Size(0, 0), rgb, Scalar(0, 0, 0));
+	display->doDisplay();
+	delete display;
 
 	for (int no = 0; no < numStroke; no++){
 		cout << "processing stroke " << no << endl;
-		int offsetX = targetChar.getStrokeOffsetX(no);
-		int offsetY = targetChar.getStrokeOffsetY(no);
-		ostringstream os;
-		os << targetCharPath << "_" << (no+1) << ".bmp";
-		Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
+		Point offset = targetChar.getStrokeOffset(no);
+		Mat& strokeImg = targetChar.strokeImage.at(no);
 		Mat largerStrokeImg(strokeImg.size().height + 10, strokeImg.size().width + 10, CV_8UC1, Scalar(0));
 		for (int i = 0; i<strokeImg.rows; i++){
 			for (int j = 0; j<strokeImg.cols; j++){
@@ -299,13 +241,12 @@ void registerPointSetToTargetCharacter(){
 		PointSet corners;
 		vector< vector<bool> > cornerFlag = getCorners(edge, corners);
 		for (auto it = corners.begin(); it != corners.end(); it++){
-			(*it).x += offsetX;
-			(*it).y += offsetY;
+			(*it) += offset;
 		}
-		DisplayService *plt = new PointsPlotDisplayService(corners, 5);
-		plt->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
-		plt->doDisplay();
-		delete plt;
+		display = new PointsDisplay(corners, 5);
+		display->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
+		display->doDisplay();
+		delete display;
 
 		// CPD registration
 		vector<CPointDouble> X;
@@ -314,7 +255,7 @@ void registerPointSetToTargetCharacter(){
 		for (int i = 0; i<edge.rows; i++){
 			for (int j = 0; j<edge.cols; j++){
 				if (edge.at<uchar>(i, j) > 128){
-					CPointDouble cpdp(j + offsetX, i + offsetY);
+					CPointDouble cpdp(j + offset.x, i + offset.y);
 					X.push_back(cpdp);
 				}
 			}
@@ -389,97 +330,34 @@ void registerPointSetToTargetCharacter(){
 		// contour line connection method
 		PointSet polygon;	//记录多边形上的点
 		for (int i = 0; i<keyPoints.size(); i++){	// character image -> large stroke image
-			keyPoints[i].x -= offsetX;
-			keyPoints[i].y -= offsetY;
+			keyPoints[i] -= offset;
 		}
 		vector< vector<int> > orderAtThisPoint = getPolygon(edge, keyPoints[0], polygon);	// 记录点在多边形上的顺序
-		for (int i = 0; i < polygon.size(); i++){
+		/*for (int i = 0; i < polygon.size(); i++){
 			Point p = polygon[i];
 			p.x += offsetX;
 			p.y += offsetY;
 			circle(rgb, p, 1, Scalar(0, 0, 0), CV_FILLED);
 		}
-		imshow("target", rgb); waitKey();
+		imshow("target", rgb); waitKey();*/
 
-		PointSet samplePoints;	// 采样后得到的点
-		for (int i = 0; i<keyPoints.size(); i++){
-			int i2 = (i + 1) % keyPoints.size();	// 下一个关键点
-			samplePoints.push_back(keyPoints[i]);
-			int kp1Order = orderAtThisPoint[keyPoints[i].y][keyPoints[i].x];
-			int kp2Order = orderAtThisPoint[keyPoints[i2].y][keyPoints[i2].x];
-			if (kp1Order < 0 || kp2Order < 0){
-				cout << "some key points are off the polygon." << endl;
-				break;
-			}
-			int dist = abs(kp1Order - kp2Order);
-			if ((polygon.size() - dist) >= dist){	// 小圈
-				double numIntervalPoints = double(dist) / numSample;	// 中间插点的间隔
-				if (kp1Order > kp2Order)	numIntervalPoints *= -1;
-				for (int j = 1; j<numSample; j++){
-					int index = floor(kp1Order + numIntervalPoints * j);
-					samplePoints.push_back(polygon[index]);
-					// replace regular sample points by the corner points
-					int startPos, endPos;	// to let startPos < endPos
-					if (kp1Order < kp2Order){	// 点1 -> 点2
-						startPos = floor(kp1Order + numIntervalPoints * (j - .5) + 1);	// notice the number '1', which means it's an exclusive interval. 3.28
-						endPos = floor(kp1Order + numIntervalPoints * (j + .5) - 1);	// shorten the search interval. 4.13
-					}
-					else{	// 点2 -> 点1
-						startPos = floor(kp1Order + numIntervalPoints * (j + .5) + 1);
-						endPos = floor(kp1Order + numIntervalPoints * (j - .5) - 1);
-					}
-					for (int p = startPos; p <= endPos; p++){
-						Point pnt = polygon[p];
-						if (cornerFlag[pnt.y][pnt.x]){
-							cout << "小圈 replace corner (" << pnt.x + offsetX << ", " << pnt.y + offsetY << ")" << endl;
-							cornerFlag[pnt.y][pnt.x] = false;
-							samplePoints.pop_back();
-							samplePoints.push_back(pnt);
-							break;
-						}
-					}
-				}
-			}
-			else{	// 大圈
-				double numIntervalPoints = double(polygon.size() - dist) / numSample;
-				if (kp1Order < kp2Order)	numIntervalPoints *= -1;	// 注意这里是小于而不是大于
-				int step = numIntervalPoints / abs(numIntervalPoints);	// +1 or -1
-				for (int j = 1; j<numSample; j++){
-					int index = floor(fmod(kp1Order + numIntervalPoints*j + polygon.size(), polygon.size())); // notice the detail
-					samplePoints.push_back(polygon[(index + polygon.size()) % polygon.size()]);
-					// replace regular sample points by the corner points
-					for (int p = 1; p <= floor(abs(numIntervalPoints)) - 1; p++){
-						index = floor(fmod(kp1Order + numIntervalPoints*(j - .5) + p*step + polygon.size(), polygon.size()));
-						Point pnt = polygon[(index + polygon.size()) % polygon.size()];
-						if (cornerFlag[pnt.y][pnt.x]){
-							cout << "大圈 replace corner (" << pnt.x + offsetX << ", " << pnt.y + offsetY << ")" << endl;
-							cornerFlag[pnt.y][pnt.x] = false;
-							samplePoints.pop_back();
-							samplePoints.push_back(pnt);
-							break;
-						}
-					}
-				}
-			}
-		}
+		PointSet samplePoints = getSamplePoints(polygon, cornerFlag, keyPoints, orderAtThisPoint);	// 采样后得到的点
 
 		// Plot the polygon
 		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
-			Point *p = &samplePoints[i];
-			p->x += offsetX;
-			p->y += offsetY;
+			samplePoints[i] += offset;
 		}
-		DisplayService *plot = new PointsPlotDisplayService(samplePoints);
-		plot->setDisplay("target", Size(0, 0), rgb);
-		plot->doDisplay();
-		delete plot;
+		display = new PointsDisplay(samplePoints, 2, true);
+		display->setDisplay("target", Size(0, 0), rgb);
+		display->doDisplay();
+		delete display;
 		targetCharVert.insert(targetCharVert.end(), samplePoints.begin(), samplePoints.end());
 	}
 	cout << endl << "There are " << targetCharVert.size() << " points in target character." << endl;
-	DisplayService *plot = new MeshPlotDisplayService(triMesh, targetCharVert);
-	plot->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
-	plot->doDisplay();
-	delete plot;
+	display = new MeshDisplay(triMesh, targetCharVert);
+	display->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
+	display->doDisplay();
+	delete display;
 }
 
 int main( int, char** argv )
@@ -488,10 +366,8 @@ int main( int, char** argv )
 	getTemplateFromSourceCharacter();
 	registerPointSetToTargetCharacter();
 	do{
-		ARAPMorphingService *morphing = new ARAPMorphingService;
-		int imgH = sourceChar.getCharHeight() + 40;
-		int imgW = sourceChar.getCharWidth() + 40;
-		morphing->setDisplay("morphing", Size(imgW, imgH));
+		ARAPMorphing *morphing = new ARAPMorphing;
+		morphing->setDisplay("morphing", sourceChar.getCharSize() + Size(40, 40));
 		morphing->doMorphing(sourceCharVert, targetCharVert, triMesh, 10);
 		morphing->doDisplay();
 		delete morphing;
