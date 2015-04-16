@@ -13,7 +13,6 @@ PointsDisplay::~PointsDisplay()
 
 void PointsDisplay::doDisplay()
 {
-	cout << points.size() << " points in " << title << "." << endl;
 	for (int i = 0; i < points.size(); i++){
 		circle(canvas, points[i], pointSize, color, filled ? CV_FILLED : 1);
 	}
