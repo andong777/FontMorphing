@@ -265,10 +265,15 @@ TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVe
 	return connectTri;
 }
 
-PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& cornerFlag, double keyPointsInterval, int numSample)
+PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& cornerFlag, int targetPolygonSize, double keyPointsInterval, int numSample)
 {
 	PointSet samplePoints;
+	cout << "source: " << polygon.size() << ", target: " << targetPolygonSize << endl;
 	int numKeyPoints = floor(polygon.size() / keyPointsInterval);	// 根据关键点之间距离，求出关键点个数，即采样段的个数
+	if (targetPolygonSize > 0){	// 关键点的个数考虑目标笔画的大小，避免点太密。 4.16
+		int numKeyPointsTarget = floor(targetPolygonSize / keyPointsInterval);
+		numKeyPoints = min(numKeyPoints, numKeyPointsTarget);
+	}
 	if (numKeyPoints == 0)	numKeyPoints = 1;	// 对不足一个区间的当作一个区间处理 4.16
 	double extraInterval = polygon.size() - keyPointsInterval * numKeyPoints;	// 划分后多余的长度，被均分到每个采样段中
 	keyPointsInterval += extraInterval / numKeyPoints;

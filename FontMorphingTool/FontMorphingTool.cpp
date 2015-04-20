@@ -18,7 +18,7 @@
 #include "MeshDisplay.h"
 #include "CharacterDisplay.h"
 
-//#define CPD_FROM_FILE
+#define CPD_FROM_FILE
 
 using namespace FM;
 using namespace cv;
@@ -109,7 +109,6 @@ void getTemplateFromSourceCharacter(){
 	strokeEndAtVertex.resize(numStroke, 0);
 	for(int no = 0; no < numStroke; no++){
 		cout << "processing stroke "<<no<<endl;
-		Point offset = sourceChar.getStrokeOffset(no);
 		Mat& strokeImg = sourceChar.strokeImage.at(no);
 		Mat largerStrokeImg(strokeImg.size() + Size(10, 10), CV_8UC1, Scalar(0));
 		for(int i=0;i<strokeImg.rows;i++){
@@ -120,6 +119,7 @@ void getTemplateFromSourceCharacter(){
 		Mat edge = getEdge(largerStrokeImg);	// 边缘检测得到的矩阵，边缘为白色。
 
 		PointSet corners;
+		Point offset = sourceChar.getStrokeOffset(no);
 		vector< vector<bool> > cornerFlag = getCorners(edge, corners);
 		for (auto it = corners.begin(); it != corners.end(); it++){
 			(*it) += offset;
@@ -129,12 +129,10 @@ void getTemplateFromSourceCharacter(){
 		display->doDisplay();
 		delete display;
 
-		// contour line connection method
 		PointSet polygon;	//记录多边形上的点
 		// 寻找多边形的起始点
 		Point startPoint = findStartPoint(edge);
-		int currentX = startPoint.x, currentY = startPoint.y;
-		cout << "initial point = (" << currentX << ", " << currentY << ")" << endl;
+		cout << "initial point = (" << startPoint.x << ", " << startPoint.y << ")" << endl;
 		getPolygon(edge, startPoint, polygon);
 		/*for (int i = 0; i < polygon.size(); i++){
 			Point p = polygon[i];
@@ -144,7 +142,21 @@ void getTemplateFromSourceCharacter(){
 		}
 		imshow("source", rgb); waitKey();*/
 
-		PointSet samplePoints = getSamplePoints(polygon, cornerFlag);
+		// 源汉字取样时考虑目标汉字大小。 4.16
+		Mat& strokeImgTarget = targetChar.strokeImage.at(no);
+		Mat largerStrokeImgTarget(strokeImgTarget.size() + Size(10, 10), CV_8UC1, Scalar(0));
+		for (int i = 0; i<strokeImgTarget.rows; i++){
+			for (int j = 0; j<strokeImgTarget.cols; j++){
+				largerStrokeImgTarget.at<uchar>(i + 5, j + 5) = 255 - strokeImgTarget.at<uchar>(i, j);
+			}
+		}
+		Mat edgeTarget = getEdge(largerStrokeImgTarget);	// 边缘检测得到的矩阵，边缘为白色。
+		PointSet polygonTarget;	//记录多边形上的点
+		// 寻找多边形的起始点
+		Point startPointTarget = findStartPoint(edgeTarget);
+		getPolygon(edgeTarget, startPointTarget, polygonTarget);
+
+		PointSet samplePoints = getSamplePoints(polygon, cornerFlag, polygonTarget.size());
 		// Plot the polygon
 		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
 			samplePoints[i] += offset;
@@ -296,9 +308,9 @@ void registerPointSetToTargetCharacter(){
 		}
 		outf.close();
 #endif
-		for (int i = 0; i<Y.size(); i++){
+		/*for (int i = 0; i<Y.size(); i++){
 			circle(rgb, SGCPDPointToCVPoint(Y[i]), 5, Scalar(0, 255, 0));
-		}
+		}*/
 
 		// find key points on the contour
 		PointSet keyPoints;
