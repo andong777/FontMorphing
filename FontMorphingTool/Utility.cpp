@@ -43,7 +43,7 @@ Mat getEdge(Mat& mat)
 	return edge;
 }
 
-vector< vector<bool> > getCorners(const Mat& mat, PointSet& outputCorners){
+vector< vector<bool> > getCornerPoints(const Mat& mat, PointSet& outputCorners){
 	// todo: 如果有时间，改进效果
 	vector< vector<bool> > cornerFlag(mat.size().height);
 	for (int i = 0; i < cornerFlag.size(); i++){

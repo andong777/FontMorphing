@@ -120,7 +120,7 @@ void getTemplateFromSourceCharacter(){
 
 		PointSet corners;
 		Point offset = sourceChar.getStrokeOffset(no);
-		vector< vector<bool> > cornerFlag = getCorners(edge, corners);
+		vector< vector<bool> > cornerFlag = getCornerPoints(edge, corners);
 		for (auto it = corners.begin(); it != corners.end(); it++){
 			(*it) += offset;
 		}
@@ -251,7 +251,7 @@ void registerPointSetToTargetCharacter(){
 
 		// find corner points on the contour
 		PointSet corners;
-		vector< vector<bool> > cornerFlag = getCorners(edge, corners);
+		vector< vector<bool> > cornerFlag = getCornerPoints(edge, corners);
 		for (auto it = corners.begin(); it != corners.end(); it++){
 			(*it) += offset;
 		}

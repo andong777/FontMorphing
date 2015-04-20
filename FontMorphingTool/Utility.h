@@ -10,7 +10,7 @@ using namespace cv;
 using namespace FM;
 
 Mat getEdge(Mat& mat);
-vector< vector<bool> > getCorners(const Mat& mat, PointSet& outputCorners = PointSet());
+vector< vector<bool> > getCornerPoints(const Mat& mat, PointSet& outputCorners = PointSet());
 Point findStartPoint(const Mat& mat);
 vector< vector<int> > getPolygon(Mat mat, Point start, PointSet& polygon);
 PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& cornerFlag, int targetPolygonSize = -1, double keyPointsInterval = 100., int numSample = NUM_SAMPLE);
