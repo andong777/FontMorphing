@@ -18,7 +18,7 @@
 #include "MeshDisplay.h"
 #include "CharacterDisplay.h"
 
-#define CPD_FROM_FILE
+//#define CPD_FROM_FILE
 
 using namespace FM;
 using namespace cv;
@@ -116,11 +116,13 @@ void getTemplateFromSourceCharacter(){
 				largerStrokeImg.at<uchar>(i+5, j+5) = 255 - strokeImg.at<uchar>(i, j);
 			}
 		}
-		Mat edge = getEdge(largerStrokeImg);	// 边缘检测得到的矩阵，边缘为白色。
+
+		PointSet polygon;	//记录多边形上的点
+		Mat edge = getEdge(largerStrokeImg, polygon);	// 边缘检测得到的矩阵，边缘为白色。
 
 		PointSet corners;
 		Point offset = sourceChar.getStrokeOffset(no);
-		vector< vector<bool> > cornerFlag = getCornerPoints(edge, corners);
+		vector< vector<bool> > cornerFlag = getCornerPoints(edge, polygon, corners);
 		for (auto it = corners.begin(); it != corners.end(); it++){
 			(*it) += offset;
 		}
@@ -129,11 +131,6 @@ void getTemplateFromSourceCharacter(){
 		display->doDisplay();
 		delete display;
 
-		PointSet polygon;	//记录多边形上的点
-		// 寻找多边形的起始点
-		Point startPoint = findStartPoint(edge);
-		cout << "initial point = (" << startPoint.x << ", " << startPoint.y << ")" << endl;
-		getPolygon(edge, startPoint, polygon);
 		/*for (int i = 0; i < polygon.size(); i++){
 			Point p = polygon[i];
 			p.x += offsetX;
@@ -150,12 +147,8 @@ void getTemplateFromSourceCharacter(){
 				largerStrokeImgTarget.at<uchar>(i + 5, j + 5) = 255 - strokeImgTarget.at<uchar>(i, j);
 			}
 		}
-		Mat edgeTarget = getEdge(largerStrokeImgTarget);	// 边缘检测得到的矩阵，边缘为白色。
-		PointSet polygonTarget;	//记录多边形上的点
-		// 寻找多边形的起始点
-		Point startPointTarget = findStartPoint(edgeTarget);
-		getPolygon(edgeTarget, startPointTarget, polygonTarget);
-
+		PointSet polygonTarget;
+		Mat edgeTarget = getEdge(largerStrokeImgTarget, polygonTarget);
 		PointSet samplePoints = getSamplePoints(polygon, cornerFlag, polygonTarget.size());
 		// Plot the polygon
 		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
@@ -247,15 +240,17 @@ void registerPointSetToTargetCharacter(){
 				largerStrokeImg.at<uchar>(i + 5, j + 5) = 255 - strokeImg.at<uchar>(i, j);
 			}
 		}
-		Mat edge = getEdge(largerStrokeImg);
+		PointSet polygon;	//记录多边形上的点
+		Mat edge = getEdge(largerStrokeImg, polygon);
 
 		// find corner points on the contour
 		PointSet corners;
-		vector< vector<bool> > cornerFlag = getCornerPoints(edge, corners);
-		for (auto it = corners.begin(); it != corners.end(); it++){
-			(*it) += offset;
+		vector< vector<bool> > cornerFlag = getCornerPoints(edge, polygon, corners);
+		PointSet corners2Display(corners.size());
+		for (int i = 0; i < corners.size(); i++){
+			corners2Display[i] = corners[i] + offset;
 		}
-		display = new PointsDisplay(corners, 5);
+		display = new PointsDisplay(corners2Display, 5);
 		display->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
 		display->doDisplay();
 		delete display;
@@ -264,13 +259,8 @@ void registerPointSetToTargetCharacter(){
 		vector<CPointDouble> X;
 		vector<CPointDouble> Y;
 		vector<int> S;
-		for (int i = 0; i<edge.rows; i++){
-			for (int j = 0; j<edge.cols; j++){
-				if (edge.at<uchar>(i, j) > 128){
-					CPointDouble cpdp(j + offset.x, i + offset.y);
-					X.push_back(cpdp);
-				}
-			}
+		for (auto it = polygon.begin(); it != polygon.end(); it++){
+			X.push_back(CPointDouble((*it).x + offset.x, (*it).y + offset.y));
 		}
 
 #ifdef CPD_FROM_FILE
@@ -296,7 +286,6 @@ void registerPointSetToTargetCharacter(){
 		cpd->NormalizeInput();
 		cpd->CPDRegister(2, 25, 2, 8, 1e-10, 0.7, 0);
 		cpd->DenormalizeOutput();
-		vector< vector<CPointDouble> > result = cpd->GetDecompositionResult();
 		Y = cpd->GetTemplatePoints();
 		delete cpd;
 		ostringstream oss;
@@ -308,19 +297,19 @@ void registerPointSetToTargetCharacter(){
 		}
 		outf.close();
 #endif
-		/*for (int i = 0; i<Y.size(); i++){
+		for (int i = 0; i<Y.size(); i++){
 			circle(rgb, SGCPDPointToCVPoint(Y[i]), 5, Scalar(0, 255, 0));
-		}*/
+		}
 
 		// find key points on the contour
 		PointSet keyPoints;
 		int *vertexBelongToTemplate = new int[X.size()];
 		for (int i = 0; i<X.size(); i++)	vertexBelongToTemplate[i] = -1;
-		for (int i = 0; i<Y.size(); i += numSample){
-			int minDist = infinity, dist, index;
+		for (int i = 0; i<Y.size(); i++){
+			int minDist = infinity, index;
 			for (int j = 0; j<X.size(); j++){
 				if (vertexBelongToTemplate[j] < 0){	// 尚未确定该点的对应关系
-					dist = (X[j].x - Y[i].x)*(X[j].x - Y[i].x) + (X[j].y - Y[i].y)*(X[j].y - Y[i].y);
+					int dist = (X[j].x - Y[i].x)*(X[j].x - Y[i].x) + (X[j].y - Y[i].y)*(X[j].y - Y[i].y);
 					if (dist < minDist){
 						minDist = dist;
 						index = j;
@@ -328,23 +317,11 @@ void registerPointSetToTargetCharacter(){
 				}
 			}
 			vertexBelongToTemplate[index] = i;
-			Point p(X[index].x, X[index].y);
-			keyPoints.push_back(p);
+			keyPoints.push_back(polygon[index]);
 		}
 		delete[] vertexBelongToTemplate;
-		cout << keyPoints.size() << " key points." << endl;
-		for (auto it = keyPoints.begin(); it != keyPoints.end(); it++){
-			cout << "(" << (*it).x << ", " << (*it).y << ") ";
-			circle(rgb, *it, 5, Scalar(0, 0, 255));
-		}
-		cout << endl;
+		cout << keyPoints.size() << " points." << endl;
 
-		// contour line connection method
-		PointSet polygon;	//记录多边形上的点
-		for (int i = 0; i<keyPoints.size(); i++){	// character image -> large stroke image
-			keyPoints[i] -= offset;
-		}
-		vector< vector<int> > orderAtThisPoint = getPolygon(edge, keyPoints[0], polygon);	// 记录点在多边形上的顺序
 		/*for (int i = 0; i < polygon.size(); i++){
 			Point p = polygon[i];
 			p.x += offsetX;
@@ -353,17 +330,17 @@ void registerPointSetToTargetCharacter(){
 		}
 		imshow("target", rgb); waitKey();*/
 
-		PointSet samplePoints = getSamplePoints(polygon, cornerFlag, keyPoints, orderAtThisPoint);	// 采样后得到的点
+		useCornerPoints(polygon, corners, keyPoints);
 
 		// Plot the polygon
-		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
-			samplePoints[i] += offset;
+		for (int i = 0; i < keyPoints.size(); i++){	// large stroke image -> character image
+			keyPoints[i] += offset;
 		}
-		display = new PointsDisplay(samplePoints, 2, true);
+		display = new PointsDisplay(keyPoints, 2, true);
 		display->setDisplay("target", Size(0, 0), rgb);
 		display->doDisplay();
 		delete display;
-		targetCharVert.insert(targetCharVert.end(), samplePoints.begin(), samplePoints.end());
+		targetCharVert.insert(targetCharVert.end(), keyPoints.begin(), keyPoints.end());
 	}
 	cout << endl << "There are " << targetCharVert.size() << " points in target character." << endl;
 	display = new MeshDisplay(triMesh, targetCharVert);
@@ -379,7 +356,7 @@ int main( int, char** argv )
 	registerPointSetToTargetCharacter();
 	do{
 		ARAPMorphing *morphing = new ARAPMorphing;
-		morphing->setDisplay("morphing", sourceChar.getCharSize() + Size(40, 40));
+		morphing->setDisplay("morphing", sourceChar.getCharSize() + Size(50, 50));
 		morphing->doMorphing(sourceCharVert, targetCharVert, triMesh, 10);
 		morphing->doDisplay();
 		delete morphing;

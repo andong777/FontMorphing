@@ -25,7 +25,7 @@ Mat fillHoles(Mat& imInput){
 	return imFilledHoles;
 }
 
-Mat getEdge(Mat& mat)
+Mat getEdge(Mat& mat, PointSet& contour)
 {
 	Mat filled = fillHoles(mat);
 	//GaussianBlur(filled, filled, Size(0, 0), 2);
@@ -40,11 +40,12 @@ Mat getEdge(Mat& mat)
 	}
 	cvtColor(edge, edge, CV_BGR2GRAY);
 	//imwrite("edge.jpg", edge);
+	assert(contours.size() == 1);
+	contour.insert(contour.end(), contours[0].begin(), contours[0].end());
 	return edge;
 }
 
-vector< vector<bool> > getCornerPoints(const Mat& mat, PointSet& outputCorners){
-	// todo: 如果有时间，改进效果
+vector< vector<bool> > getCornerPoints(const Mat& mat, const PointSet& polygon, PointSet& outputCorners){
 	vector< vector<bool> > cornerFlag(mat.size().height);
 	for (int i = 0; i < cornerFlag.size(); i++){
 		cornerFlag[i] = vector<bool>(mat.size().width);
@@ -55,12 +56,29 @@ vector< vector<bool> > getCornerPoints(const Mat& mat, PointSet& outputCorners){
 		}
 	}
 	goodFeaturesToTrack(mat, outputCorners, 20, .05, 20, Mat(), 5, true, .1);
-	cout << outputCorners.size() << " corner points." << endl;
+	Mat mat2draw = mat.clone();
 	for (int i = 0; i < outputCorners.size(); i++){
-		cornerFlag[outputCorners[i].y][outputCorners[i].x] = true;
-		//circle(mat, outputCorners[i], 5, Scalar(255, 0, 0));
+		Point& corner = outputCorners[i];
+		auto idx = std::find(polygon.begin(), polygon.end(), corner);
+		if (idx == polygon.end()){	// 角点不在轮廓上
+			int minIdx = -1, minDist = infinity;
+			for (int j = 0; j < polygon.size(); j++){
+				Point diff = polygon[j] - corner;
+				int dist = diff.x * diff.x + diff.y * diff.y;
+				if (dist < minDist){
+					minDist = dist;
+					minIdx = j;
+				}
+			}
+			assert(minIdx >= 0);
+			//cout << "replace corner (" << corner.x << ", " << corner.y << ") with polygon point " << minIdx << " (" << polygon[minIdx].x << ", " << polygon[minIdx].y << ") dist: " << minDist << endl;
+			outputCorners[i] = polygon[minIdx];
+		}
+		cornerFlag[corner.y][corner.x] = true;	// 引用的地址是不变的，如果改变了地址存储的内容，则引用也发生改变。
+		circle(mat2draw, corner, 2, Scalar(255, 0, 0), CV_FILLED);
 	}
-	//imshow("corners", mat); waitKey();
+	cout << outputCorners.size() << " corner points." << endl;
+	//imwrite("corners.jpg", mat2draw);
 	return cornerFlag;
 }
 
@@ -94,8 +112,8 @@ Point findStartPoint(const Mat& mat){
 	return Point(-1, -1);
 }
 
-vector< vector<int> > getPolygon(Mat mat, Point start, PointSet& polygon){
-	// todo: 这样找到的多边形有些角点并不在上面！
+// deprecated. use getEdge and get the output contour instead.
+vector< vector<int> > getPolygon(Mat mat, Point start, PointSet& polygon, const PointSet& corners){
 	vector< vector<int> > orderAtThisPoint(mat.size().height);	// starts from 0.
 	for (int i = 0; i < orderAtThisPoint.size(); i++){
 		orderAtThisPoint[i] = vector<int>(mat.size().width);
@@ -300,6 +318,7 @@ PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& corner
 	return samplePoints;
 }
 
+// deprecated. use useCornerPoints instead.
 PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& cornerFlag, PointSet& keyPoints, vector< vector<int> >& orderAtThisPoint, int numSample)
 {
 	PointSet samplePoints;
@@ -333,4 +352,33 @@ PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& corner
 		}
 	}
 	return samplePoints;
+}
+
+void useCornerPoints(const PointSet& polygon, const PointSet& corners, PointSet& points)
+{
+	int *pointOrder = new int[points.size()];
+	bool *used = new bool[points.size()];
+	for (int i = 0; i < points.size() ;i++){
+		pointOrder[i] = std::find(polygon.begin(), polygon.end(), points[i]) - polygon.begin();
+		used[i] = false;
+	}
+	for (auto it = corners.begin(); it != corners.end(); it++){
+		int cornerOrder = std::find(polygon.begin(), polygon.end(), *it) - polygon.begin();
+		assert(cornerOrder != polygon.size());
+		int minIdx = -1, minOrderDist = infinity;
+		for (int j = 0; j < points.size(); j++){
+			assert(pointOrder[j] != polygon.size());
+			int temp = abs(cornerOrder - pointOrder[j]);
+			int dist = min(temp, (int)polygon.size() - temp);	// 考虑大圈和小圈	4.20
+			if (dist < minOrderDist && !used[j]){
+				minOrderDist = dist;
+				minIdx = j;
+			}
+		}
+		points[minIdx] = (*it);
+		used[minIdx] = true;
+		cout << "replace corner (" << (*it).x << ", " << (*it).y << ")" << endl;
+	}
+	delete[] used;
+	delete[] pointOrder;
 }
