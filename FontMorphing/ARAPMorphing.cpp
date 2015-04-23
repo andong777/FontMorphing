@@ -154,6 +154,7 @@ void ARAPMorphing::doMorphing(float outputRatio, int numStep)
 
 void ARAPMorphing::doDisplay()
 {
+	mesh.erase(mesh.end() - connectTri.size(), mesh.end());	// 从三角网格中去除连接三角形
 	for (int i = 0; i < pointSets.size(); i++){
 		Mat originalCanvas = canvas.clone();
 		if (toScreen){
@@ -161,8 +162,7 @@ void ARAPMorphing::doDisplay()
 			osss << "step: " << i << " / " << (pointSets.size() - 1);
 			putText(canvas, osss.str(), Point(250, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 0));
 		}
-		mesh.erase(mesh.end() - connectTri.size(), mesh.end());	// 从三角网格中去除连接三角形
-		DisplayService *plot = new MeshDisplay(mesh, pointSets[i]);
+		DisplayService *plot = new MeshDisplay(mesh, pointSets[i], false);
 		plot->setDisplay(toScreen, "morphing", Size(0, 0), canvas, color);
 		plot->doDisplay();
 		delete plot;

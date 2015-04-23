@@ -32,8 +32,8 @@ void MeshDisplay::doDisplay()
 			line(canvas, points[b], points[c], color);
 			line(canvas, points[c], points[a], color);
 		}
-		if (toScreen){
-			imshow(title, canvas); waitKey();
-		}
+	}
+	if (toScreen){
+		imshow(title, canvas); waitKey();
 	}
 }

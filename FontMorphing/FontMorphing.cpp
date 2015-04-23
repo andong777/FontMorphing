@@ -18,7 +18,7 @@
 #include "CharacterDisplay.h"
 
 //#define CPD_FROM_FILE
-//#define DEMO_MODE
+#define DEMO_MODE
 
 #ifdef DEMO_MODE
 bool toScreen = true;
@@ -204,7 +204,7 @@ void getTemplateFromSourceCharacter(){
 	}
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
 	// get the connection triangles.
-	display = new MeshDisplay(triMesh, sourceCharVert);
+	display = new MeshDisplay(triMesh, sourceCharVert, false);
 	display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(255, 0, 0));
 	display->doDisplay();
 	delete display;
@@ -212,7 +212,7 @@ void getTemplateFromSourceCharacter(){
 	cout << "There are " << connectTri.size() << " connection triangles in source character." << endl;
 	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
 	cout << "There are " << triMesh.size() << " triangles in source character." << endl;
-	display = new MeshDisplay(connectTri, sourceCharVert);
+	display = new MeshDisplay(connectTri, sourceCharVert, false);
 	display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(0, 255, 0));
 	display->doDisplay();
 	delete display;
@@ -339,7 +339,7 @@ void registerPointSetToTargetCharacter(){
 		targetCharVert.insert(targetCharVert.end(), keyPoints.begin(), keyPoints.end());
 	}
 	cout << endl << "There are " << targetCharVert.size() << " points in target character." << endl;
-	display = new MeshDisplay(triMesh, targetCharVert);
+	display = new MeshDisplay(triMesh, targetCharVert, false);
 	display->setDisplay(toScreen, "target", Size(0, 0), rgb, Scalar(255, 0, 0));
 	display->doDisplay();
 	delete display;
@@ -382,7 +382,8 @@ int main( int, char** argv )
 		ARAPMorphing *morphing = new ARAPMorphing(charName);
 		morphing->setMorphing(sourceCharVert, targetCharVert, triMesh, connectTri);
 		morphing->setDisplay(toScreen, "morphing", Size(sourceChar.getCharSize().width * 1.2, sourceChar.getCharSize().height * 1.2));
-		morphing->doMorphing(.5f, 5);
+		morphing->doMorphing(.5f, 0);	// 测试输出特定时刻
+		//morphing->doMorphing(-1.f, 10);	// 测试输出过程
 		morphing->doDisplay();
 		delete morphing;
 		cleanUp();

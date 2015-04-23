@@ -3,7 +3,7 @@
 #include "DataStructure.h"
 #include "opencv2/highgui/highgui.hpp"
 
-#define NUM_SAMPLE 5
+#define NUM_SAMPLE 6
 #define KEY_POINTS_INTERVAL 50
 
 using namespace std;

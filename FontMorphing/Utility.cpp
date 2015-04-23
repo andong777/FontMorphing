@@ -3,6 +3,8 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include <queue>
 
+#define VERBOSE
+
 using namespace std;
 using namespace cv;
 using namespace FM;
@@ -29,7 +31,7 @@ Mat getEdge(Mat& mat, PointSet& contour)
 {
 	Mat filled = fillHoles(mat);
 	//GaussianBlur(filled, filled, Size(0, 0), 2);
-	Mat edge = Mat::zeros(filled.size(), CV_8UC3);    // for show result
+	Mat edge = Mat::zeros(filled.size(), CV_8UC3);
 	vector<PointSet> contours;
 	vector<Vec4i> hierarchy;
 	findContours(filled, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
@@ -42,6 +44,10 @@ Mat getEdge(Mat& mat, PointSet& contour)
 	//imwrite("edge.jpg", edge);
 	assert(contours.size() == 1);
 	contour.insert(contour.end(), contours[0].begin(), contours[0].end());
+#ifdef VERBOSE
+	cout << "There are " << contour.size() << " points on the polygon" << endl;
+	cout << "start point (" << contour[0].x << ", " << contour[0].y << ")" << endl;
+#endif
 	return edge;
 }
 
@@ -71,13 +77,17 @@ vector< vector<bool> > getCornerPoints(const Mat& mat, const PointSet& polygon, 
 				}
 			}
 			assert(minIdx >= 0);
-			//cout << "replace corner (" << corner.x << ", " << corner.y << ") with polygon point " << minIdx << " (" << polygon[minIdx].x << ", " << polygon[minIdx].y << ") dist: " << minDist << endl;
+#ifdef VERBOSE
+			cout << "replace corner (" << corner.x << ", " << corner.y << ") with polygon point " << minIdx << " (" << polygon[minIdx].x << ", " << polygon[minIdx].y << ") dist: " << minDist << endl;
+#endif
 			outputCorners[i] = polygon[minIdx];
 		}
 		cornerFlag[corner.y][corner.x] = true;	// 引用的地址是不变的，如果改变了地址存储的内容，则引用也发生改变。
 		circle(mat2draw, corner, 2, Scalar(255, 0, 0), CV_FILLED);
 	}
+#ifdef VERBOSE
 	cout << outputCorners.size() << " corner points." << endl;
+#endif
 	//imwrite("corners.jpg", mat2draw);
 	return cornerFlag;
 }
@@ -286,7 +296,9 @@ TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVe
 PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& cornerFlag, int targetPolygonSize, double keyPointsInterval, int numSample)
 {
 	PointSet samplePoints;
+#ifdef VERBOSE
 	cout << "source: " << polygon.size() << ", target: " << targetPolygonSize << endl;
+#endif
 	int numKeyPoints = floor(polygon.size() / keyPointsInterval);	// 根据关键点之间距离，求出关键点个数，即采样段的个数
 	if (targetPolygonSize > 0){	// 关键点的个数考虑目标笔画的大小，避免点太密。 4.16
 		int numKeyPointsTarget = floor(targetPolygonSize / keyPointsInterval);
@@ -303,11 +315,13 @@ PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& corner
 			samplePoints.push_back(polygon[pointIndex]);
 			// replace regular sample points by the corner points
 			for (int p = 1; p <= sampleStep - 1; p++){
-				int index = floor(fmod(basePosition + sampleStep * (j - .5) + p + polygon.size(), polygon.size()));
+				int index = floor(fmod(basePosition + sampleStep * (j - .6) + p + polygon.size(), polygon.size()));
 				Point pnt = polygon[index];
 				if (cornerFlag[pnt.y][pnt.x]){
+#ifdef VERBOSE
 					cout << "replace corner (" << pnt.x << ", " << pnt.y << ")" << endl;
-					//cornerFlag[pnt.y][pnt.x] = false;
+#endif
+					cornerFlag[pnt.y][pnt.x] = false;
 					samplePoints.pop_back();
 					samplePoints.push_back(pnt);
 					break;
@@ -339,11 +353,11 @@ PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& corner
 			samplePoints.push_back(polygon[(index + polygon.size()) % polygon.size()]);
 			// replace regular sample points by the corner points
 			for (int p = 1; p <= floor(abs(numIntervalPoints)) - 1; p++){
-				index = floor(fmod(kp1Order + numIntervalPoints*(j - .5) + p + polygon.size(), polygon.size()));
+				index = floor(fmod(kp1Order + numIntervalPoints*(j - .6) + p + polygon.size(), polygon.size()));
 				Point pnt = polygon[(index + polygon.size()) % polygon.size()];
 				if (cornerFlag[pnt.y][pnt.x]){
 					cout << "replace corner (" << pnt.x << ", " << pnt.y << ")" << endl;
-					//cornerFlag[pnt.y][pnt.x] = false;
+					cornerFlag[pnt.y][pnt.x] = false;
 					samplePoints.pop_back();
 					samplePoints.push_back(pnt);
 					break;
@@ -377,7 +391,9 @@ void useCornerPoints(const PointSet& polygon, const PointSet& corners, PointSet&
 		}
 		points[minIdx] = (*it);
 		used[minIdx] = true;
+#ifdef VERBOSE
 		cout << "replace corner (" << (*it).x << ", " << (*it).y << ")" << endl;
+#endif
 	}
 	delete[] used;
 	delete[] pointOrder;
