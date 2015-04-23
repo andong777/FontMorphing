@@ -43,9 +43,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="FontMorphingTool.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="Utility.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -65,6 +62,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CharacterDisplay.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="FontMorphing.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

@@ -7,7 +7,6 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include <iostream>
 #include <fstream>
-#include <stdlib.h>
 #include <vector>
 #include <queue>
 #include "OriCPD.h"
@@ -19,6 +18,13 @@
 #include "CharacterDisplay.h"
 
 //#define CPD_FROM_FILE
+//#define DEMO_MODE
+
+#ifdef DEMO_MODE
+bool toScreen = true;
+#else
+bool toScreen = false;
+#endif
 
 using namespace FM;
 using namespace cv;
@@ -27,33 +33,24 @@ using namespace SGCPD;
 using namespace GEOM_FADE2D;
 using namespace Eigen;
 
-int numSample = 8;
-int numStroke;
+string charName;
 CharacterImage sourceChar;
 CharacterImage targetChar;
 TriMesh triMesh;
+TriMesh connectTri;
 vector<int> strokeEndAtVertex;
 PointSet sourceCharVert;
 PointSet targetCharVert;
 
 void readCharactersData(){
-	// read the labels of strokes
+	string sourceCharPath = sourceCharDir + "\\" + charName;
+	string targetCharPath = targetCharDir + "\\" + charName;
+	sourceChar = CharacterImage();
+	targetChar = CharacterImage();
 	ifstream f;
-	f.open(templateCharPathPrefix + "\\" + charName + strokeLabelSuffix);
-	if(f){
-		string line;
-		while(getline(f, line)){
-			int num = atoi(line.c_str());
-			if(num)
-				numStroke++;
-		}
-		cout << "numStroke: " << numStroke << endl;
-		f.close();
-	}
-
 	// show the character 1
-	Mat sourceCharImage = imread(sourceCharPath + "_R.bmp");
-	imshow("source", sourceCharImage); waitKey();
+	Mat sourceCharImage = imread(sourceCharPath + charImageSuffix);
+	//imshow("source", sourceCharImage); waitKey();
 	// read the coordinates of the bounding box for a character ÊÓÍ¼£¬¹Ç¼Ü±ß½ç£¿
 	int x1, y1, x2, y2;
 	f.open(sourceCharPath + charBoxSuffix);
@@ -65,19 +62,20 @@ void readCharactersData(){
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(sourceCharPath + strokeBoxSuffix);
 	if (f){
-		for (int i = 0; i < numStroke; i++){
+		int i = 1;
+		while (f >> x1 >> y1 >> x2 >> y2){
 			ostringstream os;
-			os << sourceCharPath << "_" << (i + 1) << ".bmp";
+			os << sourceCharPath << "_" << i++ << ".bmp";
 			Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
-			f >> x1 >> y1 >> x2 >> y2;
 			sourceChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
 		}
 		f.close();
 	}
+	cout << sourceChar.getStrokeLength() << " strokes in source" << endl;
 
 	// show the character 2
-	Mat targetCharImage = imread(targetCharPath + "_R.bmp");
-	imshow("target", targetCharImage); waitKey();
+	Mat targetCharImage = imread(targetCharPath + charImageSuffix);
+	//imshow("target", targetCharImage); waitKey();
 	// read the coordinates of the bounding box for a character ÊÓÍ¼£¬¹Ç¼Ü±ß½ç£¿
 	f.open(targetCharPath + charBoxSuffix);
 	if (f){
@@ -88,11 +86,11 @@ void readCharactersData(){
 	// read the coordinates of the bounding boxs for all strokes in a given character
 	f.open(targetCharPath + strokeBoxSuffix);
 	if (f){
-		for (int i = 0; i < numStroke; i++){
+		int i = 1;
+		while (f >> x1 >> y1 >> x2 >> y2){
 			ostringstream os;
-			os << targetCharPath << "_" << (i + 1) << ".bmp";
+			os << targetCharPath << "_" << i++ << ".bmp";
 			Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
-			f >> x1 >> y1 >> x2 >> y2;
 			targetChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
 		}
 		f.close();
@@ -102,10 +100,11 @@ void readCharactersData(){
 void getTemplateFromSourceCharacter(){
 	Mat rgb(sourceChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
 	DisplayService *display = new CharacterDisplay(sourceChar);
-	display->setDisplay("source", Size(0, 0), rgb, Scalar(0, 0, 0));
+	display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(0, 0, 0));
 	display->doDisplay();
 	delete display;
 
+	int numStroke = sourceChar.getStrokeLength();
 	strokeEndAtVertex.resize(numStroke, 0);
 	for(int no = 0; no < numStroke; no++){
 		cout << "processing stroke "<<no<<endl;
@@ -127,7 +126,7 @@ void getTemplateFromSourceCharacter(){
 			(*it) += offset;
 		}
 		display = new PointsDisplay(corners, 5);
-		display->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
+		display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(255, 0, 0));
 		display->doDisplay();
 		delete display;
 
@@ -155,13 +154,9 @@ void getTemplateFromSourceCharacter(){
 			samplePoints[i] += offset;
 		}
 		display = new PointsDisplay(samplePoints, 2, true);
-		display->setDisplay("source", Size(0, 0), rgb);
+		display->setDisplay(toScreen, "source", Size(0, 0), rgb);
 		display->doDisplay();
 		delete display;
-		for (int i = 0; i < samplePoints.size();i+=numSample){
-			circle(rgb, samplePoints[i], 5, Scalar(0, 0, 255));
-		}
-		imshow("source", rgb); waitKey();
 		
 		// Triangulation
 		vector<Point2> inputPoints;
@@ -210,15 +205,15 @@ void getTemplateFromSourceCharacter(){
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
 	// get the connection triangles.
 	display = new MeshDisplay(triMesh, sourceCharVert);
-	display->setDisplay("source", Size(0, 0), rgb, Scalar(255, 0, 0));
+	display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(255, 0, 0));
 	display->doDisplay();
 	delete display;
-	TriMesh connectTri = getConnectTri(sourceCharVert, strokeEndAtVertex);
+	connectTri = getConnectTri(sourceCharVert, strokeEndAtVertex);
 	cout << "There are " << connectTri.size() << " connection triangles in source character." << endl;
 	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
 	cout << "There are " << triMesh.size() << " triangles in source character." << endl;
 	display = new MeshDisplay(connectTri, sourceCharVert);
-	display->setDisplay("source", Size(0, 0), rgb, Scalar(0, 255, 0));
+	display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(0, 255, 0));
 	display->doDisplay();
 	delete display;
 }
@@ -226,10 +221,11 @@ void getTemplateFromSourceCharacter(){
 void registerPointSetToTargetCharacter(){
 	Mat rgb(targetChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
 	DisplayService *display = new CharacterDisplay(targetChar);
-	display->setDisplay("target", Size(0, 0), rgb, Scalar(0, 0, 0));
+	display->setDisplay(toScreen, "target", Size(0, 0), rgb, Scalar(0, 0, 0));
 	display->doDisplay();
 	delete display;
 
+	int numStroke = targetChar.getStrokeLength();
 	for (int no = 0; no < numStroke; no++){
 		cout << "processing stroke " << no << endl;
 		Point offset = targetChar.getStrokeOffset(no);
@@ -251,7 +247,7 @@ void registerPointSetToTargetCharacter(){
 			corners2Display[i] = corners[i] + offset;
 		}
 		display = new PointsDisplay(corners2Display, 5);
-		display->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
+		display->setDisplay(toScreen, "target", Size(0, 0), rgb, Scalar(255, 0, 0));
 		display->doDisplay();
 		delete display;
 
@@ -265,7 +261,7 @@ void registerPointSetToTargetCharacter(){
 
 #ifdef CPD_FROM_FILE
 		ostringstream oss;
-		oss << "Target_Y_" << no << ".txt";
+		oss << outputCharDir << "\\" << charName << "CPDY" << no << ".txt";
 		ifstream inf(oss.str(), ios::in);
 		int Y_size;
 		inf >> Y_size;
@@ -289,7 +285,7 @@ void registerPointSetToTargetCharacter(){
 		Y = cpd->GetTemplatePoints();
 		delete cpd;
 		ostringstream oss;
-		oss << "Target_Y_" << no << ".txt";
+		oss << outputCharDir << "\\" << charName << "CPDY" << no << ".txt";
 		ofstream outf(oss.str(), ios::out);
 		outf << Y.size() << endl;
 		for(int i=0;i<Y.size();i++){
@@ -297,9 +293,9 @@ void registerPointSetToTargetCharacter(){
 		}
 		outf.close();
 #endif
-		for (int i = 0; i<Y.size(); i++){
+		/*for (int i = 0; i<Y.size(); i++){
 			circle(rgb, SGCPDPointToCVPoint(Y[i]), 5, Scalar(0, 255, 0));
-		}
+		}*/
 
 		// find key points on the contour
 		PointSet keyPoints;
@@ -337,30 +333,59 @@ void registerPointSetToTargetCharacter(){
 			keyPoints[i] += offset;
 		}
 		display = new PointsDisplay(keyPoints, 2, true);
-		display->setDisplay("target", Size(0, 0), rgb);
+		display->setDisplay(toScreen, "target", Size(0, 0), rgb);
 		display->doDisplay();
 		delete display;
 		targetCharVert.insert(targetCharVert.end(), keyPoints.begin(), keyPoints.end());
 	}
 	cout << endl << "There are " << targetCharVert.size() << " points in target character." << endl;
 	display = new MeshDisplay(triMesh, targetCharVert);
-	display->setDisplay("target", Size(0, 0), rgb, Scalar(255, 0, 0));
+	display->setDisplay(toScreen, "target", Size(0, 0), rgb, Scalar(255, 0, 0));
 	display->doDisplay();
 	delete display;
 }
 
+void cleanUp()
+{
+	triMesh.clear();
+	strokeEndAtVertex.clear();
+	sourceCharVert.clear();
+	targetCharVert.clear();
+}
+
 int main( int, char** argv )
 {
-	readCharactersData();
-	getTemplateFromSourceCharacter();
-	registerPointSetToTargetCharacter();
-	do{
-		ARAPMorphing *morphing = new ARAPMorphing;
-		morphing->setDisplay("morphing", sourceChar.getCharSize() + Size(50, 50));
-		morphing->doMorphing(sourceCharVert, targetCharVert, triMesh, 10);
+	vector<string> charList;
+	ifstream f(sourceCharDir + "\\list.txt");
+	if (f){
+		string thisCharName;
+		while (f >> thisCharName){
+			charList.push_back(thisCharName);
+		}
+		f.close();
+	} else{
+		cout << "character list not found! Exit" << endl;
+		return -1;
+	}
+	for (auto it = charList.begin(); it != charList.end(); it++){
+		charName = (*it);
+		cout << endl << "*** processing character " << charName << "... ***" << endl << endl;
+		readCharactersData();
+		assert(sourceChar.getStrokeLength() == targetChar.getStrokeLength());
+		getTemplateFromSourceCharacter();
+		registerPointSetToTargetCharacter();
+		assert(sourceCharVert.size() == targetCharVert.size());
+		for (int i = 0; i < sourceCharVert.size(); i++){
+			sourceCharVert[i] += Point(10, 10);
+			targetCharVert[i] += Point(10, 10);
+		}
+		ARAPMorphing *morphing = new ARAPMorphing(charName);
+		morphing->setMorphing(sourceCharVert, targetCharVert, triMesh, connectTri);
+		morphing->setDisplay(toScreen, "morphing", Size(sourceChar.getCharSize().width * 1.2, sourceChar.getCharSize().height * 1.2));
+		morphing->doMorphing(.5f, 5);
 		morphing->doDisplay();
 		delete morphing;
-	} while (1);
-	system("pause");
+		cleanUp();
+	}
 	return 0;
 }

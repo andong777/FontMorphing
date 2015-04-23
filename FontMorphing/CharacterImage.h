@@ -8,6 +8,7 @@ class CharacterImage
 private:
 	Rect charBox;
 	vector<Rect> strokeBox;
+	int numStroke;
 
 public:
 	Mat charImage;
@@ -21,5 +22,6 @@ public:
 
 	Size getCharSize();
 	Size getStrokeSize(int no);	// starts from 0, take care.
+	int getStrokeLength();
 	Point getStrokeOffset(int no);
 };

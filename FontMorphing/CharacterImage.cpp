@@ -4,6 +4,7 @@
 
 CharacterImage::CharacterImage()
 {
+	numStroke = 0;
 }
 
 CharacterImage::~CharacterImage()
@@ -20,6 +21,7 @@ void CharacterImage::addStroke(Mat& image, Rect box)
 {
 	strokeImage.push_back(image);
 	strokeBox.push_back(box);
+	numStroke++;
 }
 
 Size CharacterImage::getCharSize()
@@ -35,4 +37,9 @@ Size CharacterImage::getStrokeSize(int no)
 Point CharacterImage::getStrokeOffset(int no)
 {
 	return strokeBox.at(no).tl() - charBox.tl();
+}
+
+int CharacterImage::getStrokeLength()
+{
+	return numStroke;
 }

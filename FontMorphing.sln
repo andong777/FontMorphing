@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FontMorphingTool", "FontMorphingTool\FontMorphingTool.vcxproj", "{1165E1C7-F7A3-436B-AE5B-EC493588A5FA}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FontMorphing", "FontMorphing\FontMorphing.vcxproj", "{1165E1C7-F7A3-436B-AE5B-EC493588A5FA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

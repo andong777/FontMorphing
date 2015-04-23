@@ -9,15 +9,12 @@ class ARAPMorphing : public MorphingService, public DisplayService
 {
 private:
 	std::vector<PointSet> pointSets;
-	PointSet source;
-	PointSet target;
-	TriMesh mesh;
+	string charName;
 
 public:
-	ARAPMorphing();
+	ARAPMorphing(string charName = "");
 	~ARAPMorphing();
-	void doMorphing(PointSet source, PointSet target, TriMesh mesh, int numStep);
+	void doMorphing(float outputRatio = .5f, int numStep = 10);
 	void doDisplay();
 	PointSet getPointSetByStepIndex(int stepIndex);
 };
-

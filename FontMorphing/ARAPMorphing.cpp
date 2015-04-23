@@ -1,20 +1,31 @@
 #include "ARAPMorphing.h"
 #include "MeshDisplay.h"
+#include "Constant.h"
+#include <iomanip>
+#include <ctime>
 
 using namespace std;
 using namespace FM;
 
-#define SHOW_DETAILS
-
-ARAPMorphing::ARAPMorphing()
+ARAPMorphing::ARAPMorphing(string charName)
 {
+	if (charName.length() > 0){
+		this->charName = charName;
+	}
+	else{
+		time_t t = std::time(nullptr);
+		tm lt = *std::localtime(&t);
+		ostringstream oss;
+		oss << std::put_time(&lt, "%d-%m-%Y %H-%M-%S");
+		this->charName = oss.str();
+	}
 }
 
 ARAPMorphing::~ARAPMorphing()
 {
 }
 
-void ARAPMorphing::doMorphing(PointSet source, PointSet target, TriMesh mesh, int numStep)
+void ARAPMorphing::doMorphing(float outputRatio, int numStep)
 {
 	// todo: 这只是临时的丑陋做法，后面一定要改成从0开始的！
 	// 准备数据。
@@ -94,8 +105,9 @@ void ARAPMorphing::doMorphing(PointSet source, PointSet target, TriMesh mesh, in
 	tempMatH.bottomRightCorner(shortEdge, shortEdge) = H.bottomRightCorner(shortEdge, shortEdge);
 	MatrixXf H_new = tempMatH.inverse();
 
-	for (int i = 0; i <= numStep; i++){
-		float ratio = 1.f * i / numStep;
+	bool specified = outputRatio > 0 && outputRatio < 1;
+	for (int i = 0; i <= (specified ? 0 : numStep); i++){
+		float ratio = (specified ? outputRatio : 1.f * i / numStep);
 		VectorXf G = VectorXf::Zero(2 * numVert);
 		for (int j = 0; j < numTri; j++){
 			Matrix2f Rr;
@@ -138,25 +150,30 @@ void ARAPMorphing::doMorphing(PointSet source, PointSet target, TriMesh mesh, in
 	}
 	source.erase(source.begin());
 	target.erase(target.begin());
-	this->source = source;
-	this->target = target;
-	this->mesh = mesh;
 }
 
 void ARAPMorphing::doDisplay()
 {
 	for (int i = 0; i < pointSets.size(); i++){
-		cout << "step: " << i << " / " << pointSets.size() - 1 << endl;
 		Mat originalCanvas = canvas.clone();
-		ostringstream osss;
-		osss << "step: " << i << " / " << pointSets.size() - 1;
-		putText(canvas, osss.str(), Point(250, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 0));
+		if (toScreen){
+			ostringstream osss;
+			osss << "step: " << i << " / " << (pointSets.size() - 1);
+			putText(canvas, osss.str(), Point(250, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 0));
+		}
+		mesh.erase(mesh.end() - connectTri.size(), mesh.end());	// 从三角网格中去除连接三角形
 		DisplayService *plot = new MeshDisplay(mesh, pointSets[i]);
-		plot->setDisplay("morphing", Size(0, 0), canvas, color);
+		plot->setDisplay(toScreen, "morphing", Size(0, 0), canvas, color);
 		plot->doDisplay();
 		delete plot;
 		ostringstream oss;
-		oss << i << ".jpg";
+		oss << outputCharDir << "\\";
+		if (pointSets.size() > 1){
+			oss << charName << "_" << (pointSets.size() - 1) << "_" << i << ".jpg";
+		}
+		else{	// 只输出一个特定的时刻
+			oss << charName << ".jpg";
+		}
 		imwrite(oss.str(), canvas);
 		canvas = originalCanvas.clone();
 	}

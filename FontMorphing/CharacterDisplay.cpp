@@ -27,5 +27,7 @@ void CharacterDisplay::doDisplay()
 			}
 		}
 	}
-	imshow(title, canvas); waitKey();
+	if (toScreen){
+		imshow(title, canvas); waitKey();
+	}
 }

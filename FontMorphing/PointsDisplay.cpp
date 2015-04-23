@@ -16,6 +16,7 @@ void PointsDisplay::doDisplay()
 	for (int i = 0; i < points.size(); i++){
 		circle(canvas, points[i], pointSize, color, filled ? CV_FILLED : 1);
 	}
-	imshow(title, canvas);
-	waitKey();
+	if (toScreen){
+		imshow(title, canvas); waitKey();
+	}
 }
