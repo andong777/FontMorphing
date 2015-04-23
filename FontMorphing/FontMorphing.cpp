@@ -353,10 +353,17 @@ void cleanUp()
 	targetCharVert.clear();
 }
 
-int main( int, char** argv )
+int main( int argc, char** argv )
 {
+	if (argc >= 5){
+		sourceCharDir = argv[1];
+		targetCharDir = argv[2];
+		charListPath = argv[3];
+		outputCharDir = argv[4];
+		cout << "user set" << endl;
+	}
 	vector<string> charList;
-	ifstream f(sourceCharDir + "\\list.txt");
+	ifstream f(charListPath);
 	if (f){
 		string thisCharName;
 		while (f >> thisCharName){
