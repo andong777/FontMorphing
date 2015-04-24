@@ -211,18 +211,7 @@ TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVe
 		for (int j = 0; j < numStroke; j++){
 			connected[i][j] = false;
 		}
-	}
-	for (int i = 0; i < numStroke; i++){
-		int startPos = (i == 0 ? 0 : strokeEndAtVertex[i - 1] + 1);
-		int endPos = strokeEndAtVertex[i];
-		int numPoints = endPos - startPos + 1;
-		Point center(0, 0);
-		for (int j = startPos; j <= endPos; j++){
-			center += pointSet[j];
-		}
-		center.x /= numPoints;
-		center.y /= numPoints;
-		strokeCenter[i] = center;
+		connected[i][i] = true;	// 自身不能连接。
 	}
 
 	for (int i = 0; i < numStroke; i++){
@@ -231,58 +220,49 @@ TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVe
 		int numPoints = endPos - startPos + 1;
 		Point& center = strokeCenter[i];
 
-		int minStrokeIdx = -1;
-		float minStrokeDist = infinity;
-		for (int j = 0; j < numStroke; j++){
-			if (j != i && !connected[i][j]){
-				Point diff = center - strokeCenter[j];
+		for (int ii = 0; ii < numStroke; ii++){	// 为保证笔画间充分连接，避免几部分独立，采用激进的连接方式。 4.24
+			if (i == ii || connected[i][ii])	continue;
+
+			// 找出这个笔画上离当前笔画重心最近的点。
+			int startPosThis = (ii == 0 ? 0 : strokeEndAtVertex[ii - 1] + 1);
+			int endPosThis = strokeEndAtVertex[ii];
+			int numPointsThis = endPosThis - startPosThis + 1;
+			int minPointIdx = -1;
+			float minPointDist = infinity;
+			for (int j = startPosThis; j <= endPosThis; j++){
+				Point diff = center - pointSet[j];
 				float dist = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
-				if (dist < minStrokeDist){
-					minStrokeDist = dist;
-					minStrokeIdx = j;
+				if (dist < minPointDist){
+					minPointDist = dist;
+					minPointIdx = j;
 				}
 			}
-		}
-		connected[i][minStrokeIdx] = true;
-		connected[minStrokeIdx][i] = true;
+			int interval = 2;	// 在附近取两个点。
+			int va = (minPointIdx - interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
+			int vb = (minPointIdx + interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
+			int vc;
 
-		// 找出这个笔画上离当前笔画重心最近的点。
-		int startPosThis = (minStrokeIdx == 0 ? 0 : strokeEndAtVertex[minStrokeIdx - 1] + 1);
-		int endPosThis = strokeEndAtVertex[minStrokeIdx];
-		int numPointsThis = endPosThis - startPosThis + 1;
-		int minPointIdx = -1;
-		float minPointDist = infinity;
-		for (int j = startPosThis; j <= endPosThis; j++){
-			Point diff = center - pointSet[j];
-			float dist = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
-			if (dist < minPointDist){
-				minPointDist = dist;
-				minPointIdx = j;
+			// 然后再在当前笔画附近找几个点，最后判断三角形。
+			int *pointDist = new int[numPoints];
+			for (int j = 0; j < numPoints; j++)	pointDist[j] = infinity;
+			auto comparePoints = [=](int a, int b){ return pointDist[a - startPos] > pointDist[b - startPos]; };
+			priority_queue<int, vector<int>, decltype(comparePoints)> candidatePoints(comparePoints);
+			for (int j = startPos; j <= endPos; j++){
+				Point diff = center - pointSet[j];
+				pointDist[j - startPos] = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
+				candidatePoints.push(j);
 			}
-		}
-		int interval = 2;	// 在附近取两个点。
-		int va = (minPointIdx - interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
-		int vb = (minPointIdx + interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
-		int vc;
-
-		// 然后再在当前笔画附近找几个点，最后判断三角形。
-		int *pointDist = new int[numPoints];
-		for (int j = 0; j < numPoints; j++)	pointDist[j] = infinity;
-		auto comparePoints = [=](int a, int b){ return pointDist[a - startPos] > pointDist[b - startPos] ; };
-		priority_queue<int, vector<int>, decltype(comparePoints)> candidatePoints(comparePoints);
-		for (int j = startPos; j <= endPos; j++){
-			Point diff = center - pointSet[j];
-			pointDist[j - startPos] = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
-			candidatePoints.push(j);
-		}
-		delete[] pointDist;
- 		while (!candidatePoints.empty()){
-			vc = candidatePoints.top();
-			candidatePoints.pop();
-			bool ok = checkTriangle(pointSet[va], pointSet[vb], pointSet[vc]);
-			if (ok){
-				connectTri.push_back(Triangle(va, vb, vc));
-				break;
+			delete[] pointDist;
+			while (!candidatePoints.empty()){
+				vc = candidatePoints.top();
+				candidatePoints.pop();
+				bool ok = checkTriangle(pointSet[va], pointSet[vb], pointSet[vc]);
+				if (ok){
+					connectTri.push_back(Triangle(va, vb, vc));
+					connected[i][ii] = true;
+					connected[ii][i] = true;
+					break;
+				}
 			}
 		}
 	}

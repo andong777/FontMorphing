@@ -18,7 +18,7 @@
 #include "CharacterDisplay.h"
 
 //#define CPD_FROM_FILE
-#define DEMO_MODE
+//#define DEMO_MODE
 
 #ifdef DEMO_MODE
 bool toScreen = true;
@@ -65,7 +65,7 @@ void readCharactersData(){
 		int i = 1;
 		while (f >> x1 >> y1 >> x2 >> y2){
 			ostringstream os;
-			os << sourceCharPath << "_" << i++ << ".bmp";
+			os << sourceCharPath << "_" << i++ << strokeImageSuffix;
 			Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
 			sourceChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
 		}
@@ -89,7 +89,7 @@ void readCharactersData(){
 		int i = 1;
 		while (f >> x1 >> y1 >> x2 >> y2){
 			ostringstream os;
-			os << targetCharPath << "_" << i++ << ".bmp";
+			os << targetCharPath << "_" << i++ << strokeImageSuffix;
 			Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
 			targetChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
 		}
@@ -383,14 +383,14 @@ int main( int argc, char** argv )
 		registerPointSetToTargetCharacter();
 		assert(sourceCharVert.size() == targetCharVert.size());
 		for (int i = 0; i < sourceCharVert.size(); i++){
-			sourceCharVert[i] += Point(10, 10);
-			targetCharVert[i] += Point(10, 10);
+			sourceCharVert[i] += Point(100, 80);
+			targetCharVert[i] += Point(100, 80);
 		}
 		ARAPMorphing *morphing = new ARAPMorphing(charName);
 		morphing->setMorphing(sourceCharVert, targetCharVert, triMesh, connectTri);
-		morphing->setDisplay(toScreen, "morphing", Size(sourceChar.getCharSize().width * 1.2, sourceChar.getCharSize().height * 1.2));
-		morphing->doMorphing(.5f, 0);	// 测试输出特定时刻
-		//morphing->doMorphing(-1.f, 10);	// 测试输出过程
+		morphing->setDisplay(toScreen, "morphing", Size(max(sourceChar.getCharSize().width, targetChar.getCharSize().width) * 1.5, max(sourceChar.getCharSize().height, targetChar.getCharSize().height) * 1.5));
+		//morphing->doMorphing(.5f, 0);	// 测试输出特定时刻
+		morphing->doMorphing(-1.f, 5);	// 测试输出过程
 		morphing->doDisplay();
 		delete morphing;
 		cleanUp();
