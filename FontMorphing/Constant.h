@@ -11,7 +11,7 @@ static const string strokeImageSuffix = "F.bmp";
 static const string charBoxSuffix = "_R.txt";
 static const string strokeBoxSuffix = "_S.txt";
 
-static string sourceCharDir = "E:\\TestData\\PKU\\HT";
-static string targetCharDir = "E:\\TestData\\PKU\\LS";
-static string charListPath = "E:\\TestData\\PKU\\HT\\list.txt";
-static string outputCharDir = "E:\\output";
+extern string sourceCharDir;
+extern string targetCharDir;
+extern string charListPath;
+extern string outputCharDir;

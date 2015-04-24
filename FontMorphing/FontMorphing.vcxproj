@@ -90,6 +90,7 @@
     <ClInclude Include="CharacterImage.h" />
     <ClInclude Include="Constant.h" />
     <ClInclude Include="DataStructure.h" />
+    <ClInclude Include="FontMorphing.h" />
     <ClInclude Include="MeshDisplay.h" />
     <ClInclude Include="MorphingService.h" />
     <ClInclude Include="DisplayService.h" />
@@ -101,6 +102,7 @@
     <ClCompile Include="CharacterDisplay.cpp" />
     <ClCompile Include="CharacterImage.cpp" />
     <ClCompile Include="FontMorphing.cpp" />
+    <ClCompile Include="Main.cpp" />
     <ClCompile Include="MeshDisplay.cpp" />
     <ClCompile Include="PointsDisplay.cpp" />
     <ClCompile Include="Test.cpp" />

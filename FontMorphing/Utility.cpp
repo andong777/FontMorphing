@@ -187,7 +187,7 @@ bool checkTriangle(const Point& a, const Point& b, const Point& c)
 	float minEdge = min(min(va2vb, vb2vc), va2vc);
 	float maxEdge = max(max(va2vb, vb2vc), va2vc);
 	if (maxEdge / minEdge >= 10){	// ¹ıÓÚÊİ¸ß
-		cout << "too thin" << endl;
+		//cout << "too thin" << endl;
 		return false;
 	}
 	float twoEdges = va2vb + vb2vc + va2vc - maxEdge;

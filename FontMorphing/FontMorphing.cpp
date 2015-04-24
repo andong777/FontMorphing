@@ -1,9 +1,4 @@
-#pragma once
-
-#include "Constant.h"
-#include "DataStructure.h"
-#include "CharacterImage.h"
-#include "opencv2/highgui/highgui.hpp"
+#include "FontMorphing.h"
 #include "opencv2/imgproc/imgproc.hpp"
 #include <iostream>
 #include <fstream>
@@ -17,32 +12,18 @@
 #include "MeshDisplay.h"
 #include "CharacterDisplay.h"
 
-//#define CPD_FROM_FILE
-//#define DEMO_MODE
+FontMorphing::FontMorphing(string charName)
+{
+	this->charName = charName;
+	this->toScreen = false;
+}
 
-#ifdef DEMO_MODE
-bool toScreen = true;
-#else
-bool toScreen = false;
-#endif
+FontMorphing::~FontMorphing()
+{
 
-using namespace FM;
-using namespace cv;
-using namespace std;
-using namespace SGCPD;
-using namespace GEOM_FADE2D;
-using namespace Eigen;
+}
 
-string charName;
-CharacterImage sourceChar;
-CharacterImage targetChar;
-TriMesh triMesh;
-TriMesh connectTri;
-vector<int> strokeEndAtVertex;
-PointSet sourceCharVert;
-PointSet targetCharVert;
-
-void readCharactersData(){
+void FontMorphing::readCharactersData(){
 	string sourceCharPath = sourceCharDir + "\\" + charName;
 	string targetCharPath = targetCharDir + "\\" + charName;
 	sourceChar = CharacterImage();
@@ -97,7 +78,7 @@ void readCharactersData(){
 	}
 }
 
-void getTemplateFromSourceCharacter(){
+void FontMorphing::getTemplateFromSourceCharacter(){
 	Mat rgb(sourceChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
 	DisplayService *display = new CharacterDisplay(sourceChar);
 	display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(0, 0, 0));
@@ -218,7 +199,7 @@ void getTemplateFromSourceCharacter(){
 	delete display;
 }
 
-void registerPointSetToTargetCharacter(){
+void FontMorphing::registerPointSetToTargetCharacter(){
 	Mat rgb(targetChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
 	DisplayService *display = new CharacterDisplay(targetChar);
 	display->setDisplay(toScreen, "target", Size(0, 0), rgb, Scalar(0, 0, 0));
@@ -345,55 +326,24 @@ void registerPointSetToTargetCharacter(){
 	delete display;
 }
 
-void cleanUp()
+bool FontMorphing::work(bool toScreen)
 {
-	triMesh.clear();
-	strokeEndAtVertex.clear();
-	sourceCharVert.clear();
-	targetCharVert.clear();
-}
-
-int main( int argc, char** argv )
-{
-	if (argc >= 5){
-		sourceCharDir = argv[1];
-		targetCharDir = argv[2];
-		charListPath = argv[3];
-		outputCharDir = argv[4];
-		cout << "user set" << endl;
+	this->toScreen = toScreen;
+	readCharactersData();
+	assert(sourceChar.getStrokeLength() == targetChar.getStrokeLength());
+	getTemplateFromSourceCharacter();
+	registerPointSetToTargetCharacter();
+	assert(sourceCharVert.size() == targetCharVert.size());
+	for (int i = 0; i < sourceCharVert.size(); i++){
+		sourceCharVert[i] += Point(100, 80);
+		targetCharVert[i] += Point(100, 80);
 	}
-	vector<string> charList;
-	ifstream f(charListPath);
-	if (f){
-		string thisCharName;
-		while (f >> thisCharName){
-			charList.push_back(thisCharName);
-		}
-		f.close();
-	} else{
-		cout << "character list not found! Exit" << endl;
-		return -1;
-	}
-	for (auto it = charList.begin(); it != charList.end(); it++){
-		charName = (*it);
-		cout << endl << "*** processing character " << charName << "... ***" << endl << endl;
-		readCharactersData();
-		assert(sourceChar.getStrokeLength() == targetChar.getStrokeLength());
-		getTemplateFromSourceCharacter();
-		registerPointSetToTargetCharacter();
-		assert(sourceCharVert.size() == targetCharVert.size());
-		for (int i = 0; i < sourceCharVert.size(); i++){
-			sourceCharVert[i] += Point(100, 80);
-			targetCharVert[i] += Point(100, 80);
-		}
-		ARAPMorphing *morphing = new ARAPMorphing(charName);
-		morphing->setMorphing(sourceCharVert, targetCharVert, triMesh, connectTri);
-		morphing->setDisplay(toScreen, "morphing", Size(max(sourceChar.getCharSize().width, targetChar.getCharSize().width) * 1.5, max(sourceChar.getCharSize().height, targetChar.getCharSize().height) * 1.5));
-		//morphing->doMorphing(.5f, 0);	// 测试输出特定时刻
-		morphing->doMorphing(-1.f, 5);	// 测试输出过程
-		morphing->doDisplay();
-		delete morphing;
-		cleanUp();
-	}
-	return 0;
+	ARAPMorphing *morphing = new ARAPMorphing(charName);
+	morphing->setMorphing(sourceCharVert, targetCharVert, triMesh, connectTri);
+	morphing->setDisplay(toScreen, "morphing", Size(max(sourceChar.getCharSize().width, targetChar.getCharSize().width) * 1.5, max(sourceChar.getCharSize().height, targetChar.getCharSize().height) * 1.5));
+	//morphing->doMorphing(.5f, 0);	// 测试输出特定时刻
+	morphing->doMorphing(-1.f, 5);	// 测试输出过程
+	morphing->doDisplay();
+	delete morphing;
+	return true;
 }
