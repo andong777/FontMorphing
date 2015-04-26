@@ -2,6 +2,10 @@
 
 #include <string>
 #include <limits>
+
+//#define CPD_FROM_FILE
+//#define DEMO_MODE
+
 using namespace std;
 
 static const int infinity = numeric_limits<int>::max();

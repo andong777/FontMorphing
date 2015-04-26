@@ -1,6 +1,3 @@
-//#define CPD_FROM_FILE
-//#define DEMO_MODE
-
 #include "FontMorphing.h"
 
 #ifdef DEMO_MODE
@@ -40,7 +37,9 @@ int main(int argc, char** argv)
 		cout << "character list not found! Exit" << endl;
 		return -1;
 	}
+#ifndef DEMO_MODE
 #pragma omp parallel for
+#endif
 	for (int i = 0; i < charList.size();i++){
 		string charName = charList[i];
 		cout << endl << "*** processing character " << charName << "... ***" << endl << endl;

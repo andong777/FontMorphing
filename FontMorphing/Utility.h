@@ -17,4 +17,4 @@ vector< vector<int> > getPolygon(Mat mat, Point start, PointSet& polygon, const 
 PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& cornerFlag, int targetPolygonSize = -1, double keyPointsInterval = KEY_POINTS_INTERVAL, int numSample = NUM_SAMPLE);
 PointSet getSamplePoints(const PointSet& polygon, vector< vector<bool> >& cornerFlag, PointSet& keyPoints, vector< vector<int> >& orderAtThisPoint, int numSample = NUM_SAMPLE);
 void useCornerPoints(const PointSet& polygon, const PointSet& corners, PointSet& points);
-TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVertex);
+TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints, const vector<int>& strokeEndAtVertex);

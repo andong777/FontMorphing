@@ -79,9 +79,9 @@ void FontMorphing::readCharactersData(){
 }
 
 void FontMorphing::getTemplateFromSourceCharacter(){
-	Mat rgb(sourceChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
+	sourceCanvas = Mat(sourceChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
 	DisplayService *display = new CharacterDisplay(sourceChar);
-	display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(0, 0, 0));
+	display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(0, 0, 0));
 	display->doDisplay();
 	delete display;
 
@@ -107,7 +107,7 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 			(*it) += offset;
 		}
 		display = new PointsDisplay(corners, 5);
-		display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(255, 0, 0));
+		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(255, 0, 0));
 		display->doDisplay();
 		delete display;
 
@@ -115,9 +115,9 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 			Point p = polygon[i];
 			p.x += offsetX;
 			p.y += offsetY;
-			circle(rgb, p, 1, Scalar(0, 0, 0), CV_FILLED);
+			circle(sourceCanvas, p, 1, Scalar(0, 0, 0), CV_FILLED);
 		}
-		imshow("source", rgb); waitKey();*/
+		imshow("source", sourceCanvas); waitKey();*/
 
 		// 源汉字取样时考虑目标汉字大小。 4.16
 		Mat& strokeImgTarget = targetChar.strokeImage.at(no);
@@ -135,7 +135,7 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 			samplePoints[i] += offset;
 		}
 		display = new PointsDisplay(samplePoints, 2, true);
-		display->setDisplay(toScreen, "source", Size(0, 0), rgb);
+		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas);
 		display->doDisplay();
 		delete display;
 		
@@ -186,23 +186,16 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
 	// get the connection triangles.
 	display = new MeshDisplay(triMesh, sourceCharVert, false);
-	display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(255, 0, 0));
+	display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(255, 0, 0));
 	display->doDisplay();
 	delete display;
-	connectTri = getConnectTri(sourceCharVert, strokeEndAtVertex);
-	cout << "There are " << connectTri.size() << " connection triangles in source character." << endl;
-	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
 	cout << "There are " << triMesh.size() << " triangles in source character." << endl;
-	display = new MeshDisplay(connectTri, sourceCharVert, false);
-	display->setDisplay(toScreen, "source", Size(0, 0), rgb, Scalar(0, 255, 0));
-	display->doDisplay();
-	delete display;
 }
 
 void FontMorphing::registerPointSetToTargetCharacter(){
-	Mat rgb(targetChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
+	targetCanvas = Mat(targetChar.getCharSize() + Size(10, 10), CV_8UC3, Scalar(255, 255, 255));
 	DisplayService *display = new CharacterDisplay(targetChar);
-	display->setDisplay(toScreen, "target", Size(0, 0), rgb, Scalar(0, 0, 0));
+	display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 0, 0));
 	display->doDisplay();
 	delete display;
 
@@ -228,7 +221,7 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 			corners2Display[i] = corners[i] + offset;
 		}
 		display = new PointsDisplay(corners2Display, 5);
-		display->setDisplay(toScreen, "target", Size(0, 0), rgb, Scalar(255, 0, 0));
+		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(255, 0, 0));
 		display->doDisplay();
 		delete display;
 
@@ -275,7 +268,7 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		outf.close();
 #endif
 		/*for (int i = 0; i<Y.size(); i++){
-			circle(rgb, SGCPDPointToCVPoint(Y[i]), 5, Scalar(0, 255, 0));
+			circle(targetCanvas, SGCPDPointToCVPoint(Y[i]), 5, Scalar(0, 255, 0));
 		}*/
 
 		// find key points on the contour
@@ -303,9 +296,9 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 			Point p = polygon[i];
 			p.x += offsetX;
 			p.y += offsetY;
-			circle(rgb, p, 1, Scalar(0, 0, 0), CV_FILLED);
+			circle(targetCanvas, p, 1, Scalar(0, 0, 0), CV_FILLED);
 		}
-		imshow("target", rgb); waitKey();*/
+		imshow("target", targetCanvas); waitKey();*/
 
 		useCornerPoints(polygon, corners, keyPoints);
 
@@ -314,14 +307,18 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 			keyPoints[i] += offset;
 		}
 		display = new PointsDisplay(keyPoints, 2, true);
-		display->setDisplay(toScreen, "target", Size(0, 0), rgb);
+		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas);
 		display->doDisplay();
 		delete display;
 		targetCharVert.insert(targetCharVert.end(), keyPoints.begin(), keyPoints.end());
 	}
 	cout << endl << "There are " << targetCharVert.size() << " points in target character." << endl;
 	display = new MeshDisplay(triMesh, targetCharVert, false);
-	display->setDisplay(toScreen, "target", Size(0, 0), rgb, Scalar(255, 0, 0));
+	display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(255, 0, 0));
+	display->doDisplay();
+	delete display;
+	display = new MeshDisplay(connectTri, targetCharVert, false);
+	display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 255, 0));
 	display->doDisplay();
 	delete display;
 }
@@ -333,6 +330,17 @@ bool FontMorphing::work(bool toScreen)
 	assert(sourceChar.getStrokeLength() == targetChar.getStrokeLength());
 	getTemplateFromSourceCharacter();
 	registerPointSetToTargetCharacter();
+	connectTri = getConnectTri(sourceCharVert, targetCharVert, strokeEndAtVertex);
+	cout << "There are " << connectTri.size() << " connection triangles in source character." << endl;
+	triMesh.insert(triMesh.end(), connectTri.begin(), connectTri.end());
+	DisplayService *display = new MeshDisplay(connectTri, sourceCharVert, false);
+	display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(0, 255, 0));
+	display->doDisplay();
+	delete display;
+	display = new MeshDisplay(connectTri, targetCharVert, false);
+	display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 255, 0));
+	display->doDisplay();
+	delete display;
 	assert(sourceCharVert.size() == targetCharVert.size());
 	for (int i = 0; i < sourceCharVert.size(); i++){
 		sourceCharVert[i] += Point(100, 80);

@@ -11,6 +11,22 @@ using namespace FM;
 
 static const int deltaAngle[8][2] = { { 0, 1 }, { 1, 1 }, { 1, 0 }, { 1, -1 }, { 0, -1 }, { -1, -1 }, { -1, 0 }, { -1, 1 } };	// 顺时针
 
+class UnionFindSet
+{
+public:
+	UnionFindSet(int initial = 100);
+	~UnionFindSet();
+	int findParent(int x);
+	void makeUnion(int x, int y);
+	int getParents(vector<int>& parents);
+	int getChildren(int parent, vector<int>& children);
+
+private:
+	int capacity;
+	int *parent;
+	int *rank;
+};
+
 Mat fillHoles(Mat& imInput){
 	Mat imShow = Mat::zeros(imInput.size(), CV_8UC3);    // for show result
 	vector<PointSet > contours;
@@ -184,6 +200,9 @@ bool checkTriangle(const Point& a, const Point& b, const Point& c)
 	float va2vb = sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + .0);
 	float vb2vc = sqrt((b.x - c.x) * (b.x - c.x) + (b.y - c.y) * (b.y - c.y) + .0);
 	float va2vc = sqrt((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y) + .0);
+	if (va2vb + va2vc <= vb2vc || va2vb + vb2vc <= va2vc || va2vc + vb2vc <= va2vb){	// 先检查是否构成三角形。 4.25
+		return false;
+	}
 	float minEdge = min(min(va2vb, vb2vc), va2vc);
 	float maxEdge = max(max(va2vb, vb2vc), va2vc);
 	if (maxEdge / minEdge >= 10){	// 过于瘦高
@@ -191,85 +210,126 @@ bool checkTriangle(const Point& a, const Point& b, const Point& c)
 		return false;
 	}
 	float twoEdges = va2vb + vb2vc + va2vc - maxEdge;
-	//if (maxEdge / twoEdges >= 0.95){	// 过于矮胖	// 是否会出现这种情况？因为有两个点是挨得比较近的。 4.15
-	//	cout << "too short" << endl;
-	//	return false;
-	//}
+	if ((twoEdges - maxEdge) / maxEdge <= 0.05){	// 过于矮胖	// 是否会出现这种情况？因为有两个点是挨得比较近的。 4.15	// 确实会出现。 4.25
+		//cout << "too short" << endl;
+		return false;
+	}
 	return true;
 }
 
-TriMesh getConnectTri(const PointSet& pointSet, const vector<int>& strokeEndAtVertex)
+TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints, const vector<int>& strokeEndAtVertex)
 {
 	TriMesh connectTri;
 	int numStroke = strokeEndAtVertex.size();
 	PointSet strokeCenter(numStroke);
-	bool **connected = new bool*[numStroke];
-	for (int i = 0; i < numStroke; i++){
-		connected[i] = new bool[numStroke];
-	}
-	for (int i = 0; i < numStroke; i++){
-		for (int j = 0; j < numStroke; j++){
-			connected[i][j] = false;
-		}
-		connected[i][i] = true;	// 自身不能连接。
-	}
-
 	for (int i = 0; i < numStroke; i++){
 		int startPos = (i == 0 ? 0 : strokeEndAtVertex[i - 1] + 1);
 		int endPos = strokeEndAtVertex[i];
 		int numPoints = endPos - startPos + 1;
-		Point& center = strokeCenter[i];
+		Point center(0, 0);
+		for (int j = startPos; j <= endPos; j++){
+			center += sourcePoints[j];
+		}
+		center.x /= numPoints;
+		center.y /= numPoints;
+		strokeCenter[i] = center;
+	}
 
-		for (int ii = 0; ii < numStroke; ii++){	// 为保证笔画间充分连接，避免几部分独立，采用激进的连接方式。 4.24
-			if (i == ii || connected[i][ii])	continue;
-
-			// 找出这个笔画上离当前笔画重心最近的点。
-			int startPosThis = (ii == 0 ? 0 : strokeEndAtVertex[ii - 1] + 1);
-			int endPosThis = strokeEndAtVertex[ii];
-			int numPointsThis = endPosThis - startPosThis + 1;
-			int minPointIdx = -1;
-			float minPointDist = infinity;
-			for (int j = startPosThis; j <= endPosThis; j++){
-				Point diff = center - pointSet[j];
-				float dist = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
-				if (dist < minPointDist){
-					minPointDist = dist;
-					minPointIdx = j;
+	vector< vector<int> > strokeDistance(numStroke);
+	vector< vector<int> > strokeNearPoint(numStroke);
+	for (int i = 0; i < numStroke; i++){
+		strokeDistance[i] = vector<int>(numStroke);
+		strokeNearPoint[i] = vector<int>(numStroke);
+	}
+	for (int i = 0; i < numStroke; i++){
+		for (int j = 0; j < numStroke; j++){
+			strokeDistance[i][j] = infinity;
+			strokeNearPoint[i][j] = -1;
+			if (i == j)	continue;
+			int minIdx = -1, minDist = infinity;
+			for (int k = (j == 0) ? 0 : strokeEndAtVertex[j - 1] + 1; k <= strokeEndAtVertex[j]; k++){
+				Point diff = strokeCenter[i] - sourcePoints[k];
+				int dist = diff.x * diff.x + diff.y * diff.y;
+				if (dist < minDist){
+					minDist = dist;
+					minIdx = k;
 				}
 			}
-			int interval = 2;	// 在附近取两个点。
-			int va = (minPointIdx - interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
-			int vb = (minPointIdx + interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
-			int vc;
+			strokeDistance[i][j] = minDist;
+			strokeNearPoint[i][j] = minIdx;
+#ifdef VERBOSE
+			cout << "stroke " << i << " to stroke " << j << " min dist: " << minDist << ", point index: " << minIdx << endl;
+#endif
+		}
+	}
 
-			// 然后再在当前笔画附近找几个点，最后判断三角形。
-			int *pointDist = new int[numPoints];
-			for (int j = 0; j < numPoints; j++)	pointDist[j] = infinity;
-			auto comparePoints = [=](int a, int b){ return pointDist[a - startPos] > pointDist[b - startPos]; };
-			priority_queue<int, vector<int>, decltype(comparePoints)> candidatePoints(comparePoints);
-			for (int j = startPos; j <= endPos; j++){
-				Point diff = center - pointSet[j];
-				pointDist[j - startPos] = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
-				candidatePoints.push(j);
-			}
-			delete[] pointDist;
-			while (!candidatePoints.empty()){
-				vc = candidatePoints.top();
-				candidatePoints.pop();
-				bool ok = checkTriangle(pointSet[va], pointSet[vb], pointSet[vc]);
-				if (ok){
-					connectTri.push_back(Triangle(va, vb, vc));
-					connected[i][ii] = true;
-					connected[ii][i] = true;
-					break;
+	UnionFindSet *ufs = new UnionFindSet(numStroke);
+	vector<int> parts;
+	while (ufs->getParents(parts) > 1){
+		cout << "There are " << parts.size() << " parts left" << endl;
+		int numPart = parts.size();
+		int minStrokeIdxA = -1, minStrokeIdxB = -1, minStrokeDist = infinity;
+		for (int p = 0; p < numPart; p++){
+			vector<int> strokesA, strokesB;
+			ufs->getChildren(parts[p], strokesA);
+			for (int i = 0; i < numPart; i++){
+				if (parts[i] == parts[p] || ufs->findParent(parts[i]) == ufs->findParent(parts[p]))	continue;
+				ufs->getChildren(parts[i], strokesB);
+				for (int j = 0; j < strokesA.size(); j++){
+					for (int k = 0; k < strokesB.size(); k++){
+						int strokeA = strokesA[j];
+						int strokeB = strokesB[k];
+						if (strokeDistance[strokeA][strokeB] < minStrokeDist){
+							minStrokeDist = strokeDistance[strokeA][strokeB];
+							minStrokeIdxA = strokeA;
+							minStrokeIdxB = strokeB;
+						}
+					}
 				}
 			}
 		}
+		if (minStrokeIdxA < 0 || minStrokeIdxB < 0)	break;
+
+		int startPos = (minStrokeIdxA == 0 ? 0 : strokeEndAtVertex[minStrokeIdxA - 1] + 1);
+		int endPos = strokeEndAtVertex[minStrokeIdxA];
+		int numPoints = endPos - startPos + 1;
+		Point& center = strokeCenter[minStrokeIdxA];
+
+		int startPosThis = (minStrokeIdxB == 0 ? 0 : strokeEndAtVertex[minStrokeIdxB - 1] + 1);
+		int endPosThis = strokeEndAtVertex[minStrokeIdxB];
+		int numPointsThis = endPosThis - startPosThis + 1;
+		int minPointIdx = strokeNearPoint[minStrokeIdxA][minStrokeIdxB];
+		int interval = 2;	// 在附近取两个点。
+		int va = (minPointIdx - interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
+		int vb = (minPointIdx + interval - startPosThis + numPointsThis) % numPointsThis + startPosThis;
+		int vc;
+
+		// 然后再在当前笔画附近找几个点，最后判断三角形。
+		int *pointDist = new int[numPoints];
+		for (int j = 0; j < numPoints; j++)	pointDist[j] = infinity;
+		auto comparePoints = [=](int a, int b){ return pointDist[a - startPos] > pointDist[b - startPos]; };
+		priority_queue<int, vector<int>, decltype(comparePoints)> candidatePoints(comparePoints);
+		for (int j = startPos; j <= endPos; j++){
+			Point diff = center - sourcePoints[j];
+			pointDist[j - startPos] = sqrt(diff.x * diff.x + diff.y * diff.y + .0);
+			candidatePoints.push(j);
+		}
+		delete[] pointDist;
+		while (!candidatePoints.empty()){
+			vc = candidatePoints.top();
+			candidatePoints.pop();
+			bool ok = checkTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vc]);
+			bool ok2 = checkTriangle(targetPoints[va], targetPoints[vb], targetPoints[vc]);
+			if (!ok)	cout << "source check failed" << endl;
+			if (!ok2)	cout << "target check failed" << endl;
+			if (ok && ok2){
+				connectTri.push_back(Triangle(va, vb, vc));
+				ufs->makeUnion(minStrokeIdxA, minStrokeIdxB);
+				break;
+			}
+		}
+		
 	}
-	for (int i = 0; i < numStroke; i++){
-		delete[] connected[i];
-	}
-	delete[] connected;
 	return connectTri;
 }
 
@@ -377,4 +437,77 @@ void useCornerPoints(const PointSet& polygon, const PointSet& corners, PointSet&
 	}
 	delete[] used;
 	delete[] pointOrder;
+}
+
+
+/* Customized Union Find Set */
+
+UnionFindSet::UnionFindSet(int initial)
+{
+	capacity = initial;
+	parent = new int[capacity];
+	rank = new int[capacity];
+	for (int i = 0; i < capacity; i++){
+		parent[i] = i;
+		rank[i] = 1;
+	}
+}
+
+UnionFindSet::~UnionFindSet()
+{
+	delete[] parent;
+	delete[] rank;
+}
+
+int UnionFindSet::findParent(int x)
+{
+	int px = x;
+	while (px != parent[px]){
+		px = parent[px];
+	}
+	int temp;
+	while (x != px){
+		temp = parent[x];
+		parent[x] = px;
+		x = temp;
+	}
+	return px;
+}
+
+void UnionFindSet::makeUnion(int x, int y)
+{
+	int px = findParent(x);
+	int py = findParent(y);
+	if (px != py){
+		if (rank[px] >= rank[py]){
+			parent[py] = px;
+			rank[px] += rank[py];
+		}
+		else{
+			parent[px] = py;
+			rank[py] += rank[px];
+		}
+	}
+}
+
+int UnionFindSet::getParents(vector<int>& parents)
+{
+	parents.clear();
+	for (int i = 0; i < capacity; i++){
+		if (parent[i] == i){
+			parents.push_back(i);
+		}
+	}
+	return parents.size();
+}
+
+int UnionFindSet::getChildren(int parent, vector<int>& children)
+{
+	children.clear();
+	for (int i = 0; i < capacity; i++){
+		if (this->parent[i] == parent){
+			children.push_back(i);
+		}
+	}
+	return children.size();
 }

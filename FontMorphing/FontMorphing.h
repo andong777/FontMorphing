@@ -25,6 +25,8 @@ private:
 	PointSet targetCharVert;
 
 	bool toScreen;
+	Mat sourceCanvas;
+	Mat targetCanvas;
 
 	void readCharactersData();
 	void getTemplateFromSourceCharacter();
