@@ -94,7 +94,7 @@ void ARAPMorphing::doMorphing(float outputRatio, int numStep)
 		else if (Rr(0, 0) < 0 && Rr(1, 0) < 0){
 			angle[i] = -angle[i] - M_PI;
 		}
-	} // end of numTri
+   	} // end of numTri
 
 	posFixed--;
 	MatrixXf tempMatH(2 * numVert - 2, 2 * numVert - 2);

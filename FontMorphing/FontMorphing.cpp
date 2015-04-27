@@ -46,9 +46,15 @@ void FontMorphing::readCharactersData(){
 		int i = 1;
 		while (f >> x1 >> y1 >> x2 >> y2){
 			ostringstream os;
-			os << sourceCharPath << "_" << i++ << strokeImageSuffix;
+			os << sourceCharPath << "_" << i << strokeImageSuffix;
 			Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
+			if (!strokeImg.data){	// 4.27
+				ostringstream oss;
+				oss << sourceCharPath << "_" << i << secondStrokeImageSuffix;
+				strokeImg = imread(oss.str(), CV_LOAD_IMAGE_GRAYSCALE);
+			}
 			sourceChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
+			i++;
 		}
 		f.close();
 	}
@@ -70,12 +76,19 @@ void FontMorphing::readCharactersData(){
 		int i = 1;
 		while (f >> x1 >> y1 >> x2 >> y2){
 			ostringstream os;
-			os << targetCharPath << "_" << i++ << strokeImageSuffix;
+			os << targetCharPath << "_" << i << strokeImageSuffix;
 			Mat strokeImg = imread(os.str(), CV_LOAD_IMAGE_GRAYSCALE);
+			if (!strokeImg.data){
+				ostringstream oss;
+				oss << targetCharPath << "_" << i << secondStrokeImageSuffix;
+				strokeImg = imread(oss.str(), CV_LOAD_IMAGE_GRAYSCALE);
+			}
 			targetChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
+			i++;
 		}
 		f.close();
 	}
+	cout << targetChar.getStrokeLength() << " strokes in target" << endl;
 }
 
 void FontMorphing::getTemplateFromSourceCharacter(){
@@ -100,17 +113,6 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 		PointSet polygon;	//记录多边形上的点
 		Mat edge = getEdge(largerStrokeImg, polygon);	// 边缘检测得到的矩阵，边缘为白色。
 
-		PointSet corners;
-		Point offset = sourceChar.getStrokeOffset(no);
-		vector< vector<bool> > cornerFlag = getCornerPoints(edge, polygon, corners);
-		for (auto it = corners.begin(); it != corners.end(); it++){
-			(*it) += offset;
-		}
-		display = new PointsDisplay(corners, 5);
-		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(255, 0, 0));
-		display->doDisplay();
-		delete display;
-
 		/*for (int i = 0; i < polygon.size(); i++){
 			Point p = polygon[i];
 			p.x += offsetX;
@@ -118,6 +120,10 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 			circle(sourceCanvas, p, 1, Scalar(0, 0, 0), CV_FILLED);
 		}
 		imshow("source", sourceCanvas); waitKey();*/
+
+		PointSet corners;
+		Point offset = sourceChar.getStrokeOffset(no);
+		vector< vector<bool> > cornerFlag = getCornerPoints(edge, polygon, corners);
 
 		// 源汉字取样时考虑目标汉字大小。 4.16
 		Mat& strokeImgTarget = targetChar.strokeImage.at(no);
@@ -129,13 +135,23 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 		}
 		PointSet polygonTarget;
 		Mat edgeTarget = getEdge(largerStrokeImgTarget, polygonTarget);
-		PointSet samplePoints = getSamplePoints(polygon, cornerFlag, polygonTarget.size());
+		PointSet samplePoints = getSamplePoints(polygon, polygonTarget.size());
+		useCornerPoints(polygon, corners, samplePoints);
+
+		for (auto it = corners.begin(); it != corners.end(); it++){
+			(*it) += offset;
+		}
+		display = new PointsDisplay(corners, 5);
+		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(255, 0, 0));
+		display->doDisplay();
+		delete display;
+
 		// Plot the polygon
 		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
 			samplePoints[i] += offset;
 		}
 		display = new PointsDisplay(samplePoints, 2, true);
-		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas);
+		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(0, 0, 255));
 		display->doDisplay();
 		delete display;
 		
@@ -254,7 +270,7 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		CPD *cpd = new ::SGCPD::OriCPD();
 		cpd->SetData(X, Y, S);
 		cpd->NormalizeInput();
-		cpd->CPDRegister(2, 25, 2, 8, 1e-10, 0.7, 0);
+		cpd->CPDRegister(2, kCPDIterateTimes);
 		cpd->DenormalizeOutput();
 		Y = cpd->GetTemplatePoints();
 		delete cpd;
@@ -268,8 +284,9 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		outf.close();
 #endif
 		/*for (int i = 0; i<Y.size(); i++){
-			circle(targetCanvas, SGCPDPointToCVPoint(Y[i]), 5, Scalar(0, 255, 0));
-		}*/
+			circle(targetCanvas, SGCPDPointToCVPoint(Y[i]), 3, Scalar(0, 255, 0));
+		}
+		imshow("target", targetCanvas); waitKey();*/
 
 		// find key points on the contour
 		PointSet keyPoints;
@@ -290,27 +307,29 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 			keyPoints.push_back(polygon[index]);
 		}
 		delete[] vertexBelongToTemplate;
-		cout << keyPoints.size() << " points." << endl;
+		cout << keyPoints.size() << " key points." << endl;
 
-		/*for (int i = 0; i < polygon.size(); i++){
-			Point p = polygon[i];
-			p.x += offsetX;
-			p.y += offsetY;
-			circle(targetCanvas, p, 1, Scalar(0, 0, 0), CV_FILLED);
+		/*for (int i = 0; i < keyPoints.size(); i++){
+			Point p = keyPoints[i] + offset;
+			cout << "(" << p.x << ", " << p.y << ")" << endl;
+			circle(targetCanvas, p, 5, Scalar(0, 0, 255));
 		}
 		imshow("target", targetCanvas); waitKey();*/
 
 		useCornerPoints(polygon, corners, keyPoints);
+		PointSet& samplePoints = keyPoints;
+		/*PointSet samplePoints = getSamplePoints(polygon, keyPoints);
+		useCornerPoints(polygon, corners, samplePoints);*/
 
 		// Plot the polygon
-		for (int i = 0; i < keyPoints.size(); i++){	// large stroke image -> character image
-			keyPoints[i] += offset;
+		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
+			samplePoints[i] += offset;
 		}
-		display = new PointsDisplay(keyPoints, 2, true);
-		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas);
+		display = new PointsDisplay(samplePoints, 2, true);
+		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 0, 255));
 		display->doDisplay();
 		delete display;
-		targetCharVert.insert(targetCharVert.end(), keyPoints.begin(), keyPoints.end());
+		targetCharVert.insert(targetCharVert.end(), samplePoints.begin(), samplePoints.end());
 	}
 	cout << endl << "There are " << targetCharVert.size() << " points in target character." << endl;
 	display = new MeshDisplay(triMesh, targetCharVert, false);

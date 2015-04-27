@@ -18,12 +18,15 @@ int main(int argc, char** argv)
 		targetCharDir = argv[2];
 		charListPath = argv[3];
 		outputCharDir = argv[4];
-		cout << "user setting: " << endl;
-		cout << "source character directory: " << sourceCharDir << endl;
-		cout << "target character directory: " << targetCharDir << endl;
-		cout << "character list path: " << charListPath << endl;
-		cout << "output character directory: " << outputCharDir << endl;
+		cout << "use user setting: " << endl;
 	}
+	else{
+		cout << "use default demo data: " << endl;
+	}
+	cout << "source character directory: " << sourceCharDir << endl;
+	cout << "target character directory: " << targetCharDir << endl;
+	cout << "character list path: " << charListPath << endl;
+	cout << "output character directory: " << outputCharDir << endl;
 	vector<string> charList;
 	ifstream f(charListPath);
 	if (f){
@@ -37,8 +40,8 @@ int main(int argc, char** argv)
 		cout << "character list not found! Exit" << endl;
 		return -1;
 	}
-#ifndef DEMO_MODE
-#pragma omp parallel for
+#ifdef PARALLEL_MODE
+#pragma omp parallel for /*num_threads(4)*/
 #endif
 	for (int i = 0; i < charList.size();i++){
 		string charName = charList[i];
