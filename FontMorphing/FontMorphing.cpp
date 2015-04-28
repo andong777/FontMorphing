@@ -167,7 +167,7 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 			Segment2 seg(inputPoints[i], inputPoints[(i + 1)%inputPoints.size()]);
 			segments.push_back(seg);
 		}
-		ConstraintGraph2* constraint = dt.createConstraint(segments, CIS_KEEP_DELAUNAY);
+		ConstraintGraph2* constraint = dt.createConstraint(segments, CIS_IGNORE_DELAUNAY);
 		Zone2* zone = dt.createZone(constraint, ZL_INSIDE);
 		dt.applyConstraintsAndZones();
 		vector<Triangle2*> outputTriangles;
@@ -195,10 +195,11 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 		sourceCharVert.insert(sourceCharVert.end(), samplePoints.begin(), samplePoints.end());
 		strokeEndAtVertex[no] = sourceCharVert.size() - 1;
  	} // end of for stroke
-
+#ifdef VERBOSE
 	for (int i = 0; i < numStroke; i++){
 		cout << "stroke " << i << " ends at vertex " << strokeEndAtVertex[i] << endl;
 	}
+#endif
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
 	// get the connection triangles.
 	display = new MeshDisplay(triMesh, sourceCharVert, false);
@@ -283,10 +284,10 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		}
 		outf.close();
 #endif
-		/*for (int i = 0; i<Y.size(); i++){
+		for (int i = 0; i<Y.size(); i++){
 			circle(targetCanvas, SGCPDPointToCVPoint(Y[i]), 3, Scalar(0, 255, 0));
 		}
-		imshow("target", targetCanvas); waitKey();*/
+		imshow("target", targetCanvas); waitKey();
 
 		// find key points on the contour
 		PointSet keyPoints;
@@ -356,10 +357,12 @@ bool FontMorphing::work(bool toScreen)
 	display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(0, 255, 0));
 	display->doDisplay();
 	delete display;
+	imwrite(outputCharDir + "\\" + charName + "_src_mesh.jpg", sourceCanvas);
 	display = new MeshDisplay(connectTri, targetCharVert, false);
 	display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 255, 0));
 	display->doDisplay();
 	delete display;
+	imwrite(outputCharDir + "\\" + charName + "_dst_mesh.jpg", targetCanvas);
 	assert(sourceCharVert.size() == targetCharVert.size());
 	for (int i = 0; i < sourceCharVert.size(); i++){
 		sourceCharVert[i] += Point(100, 80);

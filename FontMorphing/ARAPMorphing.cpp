@@ -175,6 +175,22 @@ void ARAPMorphing::doDisplay()
 			oss << charName << ".jpg";
 		}
 		imwrite(oss.str(), canvas);
+
+		canvas = originalCanvas.clone();
+		plot = new MeshDisplay(mesh, pointSets[i], true);
+		plot->setDisplay(false, "morphing", Size(0, 0), canvas, color);
+		plot->doDisplay();
+		delete plot;
+		oss.str(""); oss.clear();
+		oss << outputCharDir << "\\";
+		if (pointSets.size() > 1){
+			oss << charName << "_" << (pointSets.size() - 1) << "_" << i << "F.jpg";
+		}
+		else{	// 只输出一个特定的时刻
+			oss << charName << "F.jpg";
+		}
+		imwrite(oss.str(), canvas);
+
 		canvas = originalCanvas.clone();
 	}
 }

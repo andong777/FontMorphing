@@ -20,7 +20,7 @@ for char_name in chars:
 
 inf.close()
 # os.remove(list_file_path)
-os.rename(list_file_path, os.path.join(dir_path, list_file.split()[0]))
+os.rename(list_file_path, os.path.join(dir_path, list_file.split('.')[0] + '.backup'))
 
 outf = open(os.path.join(dir_path, list_file_path), 'w', encoding='utf-8')
 for char_name in filtered:

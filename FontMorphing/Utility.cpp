@@ -62,6 +62,7 @@ Mat getEdge(Mat& mat, PointSet& contour)
 		drawContours(edge, contoursSmoothed, i, Scalar::all(255), 1);
 	}
 	cvtColor(edge, edge, CV_BGR2GRAY);
+	//imshow("edge", edge); waitKey();
 	int idx = 0, maxCount = -1;
 	for (int i = 0; i < contours.size(); i++){	// 处理孤立点的情况。（见楷体“掣”字） 4.27
 		if ((int)contours[i].size() > maxCount){
@@ -238,7 +239,8 @@ float evaluateTriangle(const Point& a, const Point& b, const Point& c)
 	}
 	
 	// positive score
-	int score = min(va2vb, va2vc) / max(va2vb, va2vc) * 10 + min(va2vb, vb2vc) / max(va2vb, vb2vc) * 10 + min(vb2vc, va2vc) / max(vb2vc, va2vc) * 10;
+	int score = 0;
+	score += min(va2vb, va2vc) / max(va2vb, va2vc) * 10 + min(va2vb, vb2vc) / max(va2vb, vb2vc) * 10 + min(vb2vc, va2vc) / max(vb2vc, va2vc) * 10;
 	return score;
 }
 
@@ -267,7 +269,7 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		strokeDistance[i] = new int[numStroke];
 		strokeNearPoint[i] = new Pair[numStroke];
 	}
-	const int minThreshold = 500;	// 避免两个笔画连在一起导致找到的两点距离太近或重合。 4.27
+	const int minThreshold = 900;	// 避免两个笔画连在一起导致找到的两点距离太近或重合。 4.27
 	for (int i = 0; i < numStroke; i++){
 		for (int j = 0; j < numStroke; j++){
 			strokeDistance[i][j] = infinity;
@@ -292,7 +294,6 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		}
 	}
 
-	int interval = 5;	// 两个点间的间隔。
 	UnionFindSet *ufs = new UnionFindSet(numStroke);
 	vector<int> parts;
 	int max_loop_times = 100;	// 最多支持100个笔画，足够了。
@@ -346,17 +347,17 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		int vc;
 
 		vector<int> candidatePoints;
-		for (int i = startPosA; i <= endPosA; i++){
-			candidatePoints.push_back(i);
-		}
-		for (int i = startPosB; i <= endPosB; i++){
-			candidatePoints.push_back(i);
+		for (int i = 1; i <= kNumSample; i++){
+			candidatePoints.push_back((va - startPosA + i + numPointsA) % numPointsA + startPosA);
+			candidatePoints.push_back((va - startPosA - i + numPointsA) % numPointsA + startPosA);
+			candidatePoints.push_back((vb - startPosB + i + numPointsB) % numPointsB + startPosB);
+			candidatePoints.push_back((vb - startPosB - i + numPointsB) % numPointsB + startPosB);
 		}
 		int bestIdx = -1;
 		float bestScore = -1 * infinity;
 		for (int i = 0; i < candidatePoints.size(); i++){
 			int vtemp = candidatePoints[i];
-			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp]) + evaluateTriangle(targetPoints[va], targetPoints[vb], targetPoints[vtemp]);
+			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp])/* + evaluateTriangle(targetPoints[va], targetPoints[vb], targetPoints[vtemp])*/;
 			if (score > bestScore){
 				bestScore = score;
 				bestIdx = candidatePoints[i];
@@ -377,8 +378,8 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 	// 对距离特别近（达到某个阈值）但已经在一个集合中的笔画也建立连接三角形。 4.26
 	int before = connectTri.size();
 	cout << "extra step of generating connection triangle" << endl;
-	int threshold = 5000;	// 平方距离
-	int max_extra = numStroke;	// 最多添加多少个
+	int threshold = 3000;	// 平方距离
+	int max_extra = 2 * numStroke;	// 最多添加多少个
 	int extra_cnt = 0;
 	auto compare = [strokeDistance](Pair sp1, Pair sp2) { return strokeDistance[sp1.a][sp1.b] > strokeDistance[sp2.a][sp2.b]; };
 	priority_queue<Pair, vector<Pair>, decltype(compare)> strokePairs(compare);
@@ -386,10 +387,14 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		for (int j = 0; j < numStroke; j++){
 			if (i == j || connected[i][j])	continue;
 			if (strokeDistance[i][j] < threshold){
-				strokePairs.push(Pair(i, j));
+				Pair pointPair = strokeNearPoint[i][j];
+				Point diff = targetPoints[pointPair.a] - targetPoints[pointPair.b];
+				if (diff.x * diff.x + diff.y * diff.y < 1.5 * threshold){	// 也判断笔画在目标字形中的距离
+					strokePairs.push(Pair(i, j));
+				}
 			}
 		}
-	}
+	} 
 	while (!strokePairs.empty() && extra_cnt < max_extra){
 		Pair& sp = strokePairs.top();
 		strokePairs.pop();
@@ -407,17 +412,17 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		int vc;
 
 		vector<int> candidatePoints;
-		for (int i = startPosA; i <= endPosA; i++){
-			candidatePoints.push_back(i);
-		}
-		for (int i = startPosB; i <= endPosB; i++){
-			candidatePoints.push_back(i);
+		for (int i = 1; i <= kNumSample; i++){
+			candidatePoints.push_back((va - startPosA + i + numPointsA) % numPointsA + startPosA);
+			candidatePoints.push_back((va - startPosA - i + numPointsA) % numPointsA + startPosA);
+			candidatePoints.push_back((vb - startPosB + i + numPointsB) % numPointsB + startPosB);
+			candidatePoints.push_back((vb - startPosB - i + numPointsB) % numPointsB + startPosB);
 		}
 		int bestIdx = -1;
 		float bestScore = -1 * infinity;
 		for (int i = 0; i < candidatePoints.size(); i++){
 			int vtemp = candidatePoints[i];
-			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp]) + evaluateTriangle(targetPoints[va], targetPoints[vb], targetPoints[vtemp]);
+			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp])/* + evaluateTriangle(targetPoints[va], targetPoints[vb], targetPoints[vtemp])*/;
 			if (score > bestScore){
 				bestScore = score;
 				bestIdx = candidatePoints[i];
