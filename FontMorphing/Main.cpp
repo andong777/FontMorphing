@@ -6,9 +6,9 @@ bool toScreen = true;
 bool toScreen = false;
 #endif
 
-string sourceCharDir = "E:\\TestData\\PKU\\HT";
-string targetCharDir = "E:\\TestData\\PKU\\LS";
-string charListPath = "E:\\TestData\\PKU\\HT\\list.txt";
+string sourceCharDir = "TestData\\PKU\\HT";
+string targetCharDir = "TestData\\PKU\\LS";
+string charListPath = "TestData\\PKU\\list.txt";
 string outputCharDir = "E:\\output";
 
 int main(int argc, char** argv)
