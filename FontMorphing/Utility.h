@@ -16,3 +16,5 @@ PointSet getSamplePoints(const PointSet& polygon, int targetPolygonSize = -1, do
 PointSet getSamplePoints(const PointSet& polygon, PointSet& keyPoints, int numSample = kNumSample);
 void useCornerPoints(const PointSet& polygon, const PointSet& corners, PointSet& points);
 TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints, const vector<int>& strokeEndAtVertex);
+PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPointSet);
+bool moveSamplePoints(const PointSet& polygon, PointSet& points);

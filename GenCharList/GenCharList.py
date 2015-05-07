@@ -9,7 +9,7 @@ full_list_file = 'fulllist.txt'
 test_list_file = 'testlist.txt'
 result_dir = r'E:\output'
 
-# Í³¼ÆÖ¸¶¨Ä¿Â¼ÏÂËùÓÐºº×Ö
+# ç»Ÿè®¡æŒ‡å®šç›®å½•ä¸‹æ‰€æœ‰æ±‰å­—
 
 full_list_file_path = os.path.join(data_dir, full_list_file)
 test_list_file_path = os.path.join(data_dir, test_list_file)
@@ -27,7 +27,7 @@ for char in char_list:
     f.write('GB' + str(char) + '\n')
 f.close()
 
-# ´ÓÁÐ±íÖÐÈ¥³ýÒÑÓÐµÄºº×Ö
+# ä»Žåˆ—è¡¨ä¸­åŽ»é™¤å·²æœ‰çš„æ±‰å­—
 
 result_files = os.listdir(result_dir)
 inf = open(full_list_file_path, 'r', encoding='utf-8')
@@ -40,9 +40,10 @@ for char_name in chars:
             break
 
 inf.close()
-backup_file_path = os.path.join(data_dir, test_list_file.split('.')[0] + '.backup')
-os.remove(backup_file_path)
-os.rename(test_list_file_path, backup_file_path)
+if os.path.exists(test_list_file_path):
+    backup_file_path = os.path.join(data_dir, test_list_file.split('.')[0] + '.backup')
+    os.remove(backup_file_path)
+    os.rename(test_list_file_path, backup_file_path)
 
 outf = open(test_list_file_path, 'w', encoding='utf-8')
 for char_name in filtered:

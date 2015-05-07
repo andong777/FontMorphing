@@ -14,6 +14,7 @@ private:
 public:
 	ARAPMorphing(string charName = "");
 	~ARAPMorphing();
+	void setMorphing(PointSet& source, PointSet& target, TriMesh& mesh, TriMesh& connectTri);
 	void doMorphing(float outputRatio = .5f, int numStep = 10);
 	void doDisplay();
 	PointSet getPointSetByStepIndex(int stepIndex);

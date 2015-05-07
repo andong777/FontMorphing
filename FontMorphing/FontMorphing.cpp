@@ -229,6 +229,11 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		}
 		PointSet polygon;	//记录多边形上的点
 		Mat edge = getEdge(largerStrokeImg, polygon);
+		/*for (int i = 0; i < polygon.size(); i++){
+			Point p = polygon[i] + offset;
+			circle(targetCanvas, p, 2, Scalar(0, 0, 255), CV_FILLED);
+			imshow("target", targetCanvas); waitKey();
+		}*/
 
 		// find corner points on the contour
 		PointSet corners;
@@ -284,31 +289,25 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		}
 		outf.close();
 #endif
+#ifdef DEMO_MODE
 		for (int i = 0; i<Y.size(); i++){
 			circle(targetCanvas, SGCPDPointToCVPoint(Y[i]), 3, Scalar(0, 255, 0));
 		}
 		imshow("target", targetCanvas); waitKey();
+#endif
 
 		// find key points on the contour
-		PointSet keyPoints;
-		int *vertexBelongToTemplate = new int[X.size()];
-		for (int i = 0; i<X.size(); i++)	vertexBelongToTemplate[i] = -1;
-		for (int i = 0; i<Y.size(); i++){
-			int minDist = infinity, index;
-			for (int j = 0; j<X.size(); j++){
-				if (vertexBelongToTemplate[j] < 0){	// 尚未确定该点的对应关系
-					int dist = (X[j].x - Y[i].x)*(X[j].x - Y[i].x) + (X[j].y - Y[i].y)*(X[j].y - Y[i].y);
-					if (dist < minDist){
-						minDist = dist;
-						index = j;
-					}
-				}
-			}
-			vertexBelongToTemplate[index] = i;
-			keyPoints.push_back(polygon[index]);
+		PointSet templatePointSet, dataPointSet;
+		for (int i = 0; i < Y.size(); i++){
+			templatePointSet.push_back(SGCPDPointToCVPoint(Y[i]));
 		}
-		delete[] vertexBelongToTemplate;
-		cout << keyPoints.size() << " key points." << endl;
+		for (int i = 0; i < X.size(); i++){
+			dataPointSet.push_back(SGCPDPointToCVPoint(X[i]));
+		}
+		PointSet keyPoints = findKeyPoints(templatePointSet, dataPointSet);
+		for (int i = 0; i < keyPoints.size(); i++){
+			keyPoints[i] -= offset;
+		}
 
 		/*for (int i = 0; i < keyPoints.size(); i++){
 			Point p = keyPoints[i] + offset;
@@ -317,6 +316,7 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		}
 		imshow("target", targetCanvas); waitKey();*/
 
+		moveSamplePoints(polygon, keyPoints);
 		useCornerPoints(polygon, corners, keyPoints);
 		PointSet& samplePoints = keyPoints;
 		/*PointSet samplePoints = getSamplePoints(polygon, keyPoints);
@@ -364,13 +364,9 @@ bool FontMorphing::work(bool toScreen)
 	delete display;
 	imwrite(outputCharDir + "\\" + charName + "_dst_mesh.jpg", targetCanvas);
 	assert(sourceCharVert.size() == targetCharVert.size());
-	for (int i = 0; i < sourceCharVert.size(); i++){
-		sourceCharVert[i] += Point(100, 80);
-		targetCharVert[i] += Point(100, 80);
-	}
 	ARAPMorphing *morphing = new ARAPMorphing(charName);
 	morphing->setMorphing(sourceCharVert, targetCharVert, triMesh, connectTri);
-	morphing->setDisplay(toScreen, "morphing", Size(max(sourceChar.getCharSize().width, targetChar.getCharSize().width) * 1.5, max(sourceChar.getCharSize().height, targetChar.getCharSize().height) * 1.5));
+	morphing->setDisplay(toScreen, "morphing", Size(max(sourceChar.getCharSize().width, targetChar.getCharSize().width) * 1.1, max(sourceChar.getCharSize().height, targetChar.getCharSize().height) * 1.1));
 	//morphing->doMorphing(.5f, 0);	// 测试输出特定时刻
 	morphing->doMorphing(-1.f, 5);	// 测试输出过程
 	morphing->doDisplay();

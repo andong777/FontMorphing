@@ -1,4 +1,5 @@
 #include "FontMorphing.h"
+#include <ctime>
 
 #ifdef DEMO_MODE
 bool toScreen = true;
@@ -8,9 +9,9 @@ bool toScreen = false;
 
 string sourceCharDir = "TestData\\PKU\\HT";
 string targetCharDir = "TestData\\PKU\\LS";
-string charListPath = "TestData\\PKU\\list.txt";
+string charListPath = "TestData\\PKU\\testlist.txt";
 string outputCharDir = "E:\\output";
-
+time_t tstart, tend;
 int main(int argc, char** argv)
 {
 	if (argc >= 5){
@@ -40,6 +41,7 @@ int main(int argc, char** argv)
 		cout << "character list not found! Exit" << endl;
 		return -1;
 	}
+	tstart = time(0);
 #ifdef PARALLEL_MODE
 #pragma omp parallel for /*num_threads(4)*/
 #endif
@@ -56,5 +58,14 @@ int main(int argc, char** argv)
 		}
 		delete morphing;
 	}
+	tend = time(0);
+	ofstream of("time.txt");
+	int seconds = difftime(tend, tstart);
+	int hours = seconds / 3600;
+	seconds %= 3600;
+	int minutes = seconds / 60;
+	seconds %= 60;
+	of << "" << hours + " h " << minutes << " m " << seconds << " s." << endl;
+	of.close();
 	return 0;
 }

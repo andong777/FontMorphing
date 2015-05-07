@@ -25,8 +25,83 @@ ARAPMorphing::~ARAPMorphing()
 {
 }
 
+void ARAPMorphing::setMorphing(PointSet& source, PointSet& target, TriMesh& mesh, TriMesh& connectTri)
+{
+	// 统一两个字形的大小
+	int srcLeft = 10000, srcRight = 0, srcTop = 10000, srcBottom = 0, srcWidth, srcHeight, srcArea;
+	for (int i = 0; i < source.size(); i++){
+		Point &p = source[i];
+		if (p.x < srcLeft)	srcLeft = p.x;
+		if (p.x > srcRight)	srcRight = p.x;
+		if (p.y < srcTop)	srcTop = p.y;
+		if (p.y > srcBottom)	srcBottom = p.y;
+	}
+	srcWidth = srcRight - srcLeft;
+	srcHeight = srcBottom - srcTop;
+	srcArea = srcWidth * srcHeight;
+
+	int dstLeft = 10000, dstRight = 0, dstTop = 10000, dstBottom = 0, dstWidth, dstHeight, dstArea;
+	for (int i = 0; i < target.size(); i++){
+		Point &p = target[i];
+		if (p.x < dstLeft)	dstLeft = p.x;
+		if (p.x > dstRight)	dstRight = p.x;
+		if (p.y < dstTop)	dstTop = p.y;
+		if (p.y > dstBottom)	dstBottom = p.y;
+	}
+	dstWidth = dstRight - dstLeft;
+	dstHeight = dstBottom - dstTop;
+	dstArea = dstWidth * dstHeight;
+	cout << "before: srcLeft = " << srcLeft << ", dstLeft = " << dstLeft << endl;
+
+	PointSet *changedPoints, *fixedPoints;
+	int changedLeftBound, changedTopBound;
+	cout << "srcArea = " << srcArea << ", dstArea = " << dstArea << endl;
+	if (srcArea < dstArea){	// 将小的变大
+		cout << "enlarging source" << endl;
+		changedPoints = &source;
+		changedLeftBound = srcLeft;
+		changedTopBound = srcTop;
+	}
+	else if (dstArea < srcArea){
+		cout << "enlarging target" << endl;
+		changedPoints = &target;
+		changedLeftBound = dstLeft;
+		changedTopBound = dstTop;
+	}
+	else{
+		return;	// 面积相同，几乎不可能
+	}
+	float widthRatio = float(max(srcWidth, dstWidth)) / float(min(srcWidth, dstWidth));
+	float heightRatio = float(max(srcHeight, dstHeight)) / float(min(srcHeight, dstHeight));
+	for (int i = 0; i < changedPoints->size(); i++){
+		Point &p = changedPoints->at(i);
+		p.x = changedLeftBound + (p.x - changedLeftBound) * widthRatio;
+		p.y = changedTopBound + (p.y - changedTopBound) * heightRatio;
+	}
+
+	MorphingService::setMorphing(source, target, mesh, connectTri);
+}
+
 void ARAPMorphing::doMorphing(float outputRatio, int numStep)
 {
+	// 固定点计算，使用最接近重心的点。 5.7
+	Point center(0, 0);
+	for (auto it = source.begin(); it != source.end(); it++){
+		center += *it;
+	}
+	center.x /= (int)source.size();
+	center.y /= (int)source.size();
+	int minDist = infinity, minIdx = -1;
+	for (int i = 0; i < source.size(); i++){
+		Point diff = center - source[i];
+		int dist = diff.x * diff.x + diff.y * diff.y;
+		if (dist < minDist){
+			minDist = dist;
+			minIdx = i;
+		}
+	}
+	int posFixed = minIdx;
+
 	// todo: 这只是临时的丑陋做法，后面一定要改成从0开始的！
 	// 准备数据。
 	source.insert(source.begin(), Point());
@@ -37,7 +112,6 @@ void ARAPMorphing::doMorphing(float outputRatio, int numStep)
 		(*it).vc++;
 	}
 
-	int posFixed = 10;
 	int numTri = mesh.size(), numVert = source.size()-1;
 	Point *sv = new Point[numVert+1];
 	Point *tv = new Point[numVert+1];
@@ -154,13 +228,31 @@ void ARAPMorphing::doMorphing(float outputRatio, int numStep)
 
 void ARAPMorphing::doDisplay()
 {
+	// 为了去除形状插值算法中不知道怎么出现的空白部分。 5.7
+	int leftMargin = 10;
+	int topMargin = 10;
+	for (int step = 0; step < pointSets.size(); step++){
+		PointSet &points = pointSets[step];
+		int leftBound = 10000, topBound = 10000;
+		for (int i = 0; i < points.size(); i++){
+			Point &p = points[i];
+			if (p.x < leftBound)	leftBound = p.x;
+			if (p.y < topBound)	topBound = p.y;
+		}
+		for (int i = 0; i < points.size(); i++){
+			Point &p = points[i];
+			p.x = leftMargin + p.x - leftBound;
+			p.y = topMargin + p.y - topBound;
+		}
+	}
+
 	mesh.erase(mesh.end() - connectTri.size(), mesh.end());	// 从三角网格中去除连接三角形
 	for (int i = 0; i < pointSets.size(); i++){
 		Mat originalCanvas = canvas.clone();
 		if (toScreen){
 			ostringstream osss;
 			osss << "step: " << i << " / " << (pointSets.size() - 1);
-			putText(canvas, osss.str(), Point(250, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 0));
+			putText(canvas, osss.str(), Point(50, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 0));
 		}
 		DisplayService *plot = new MeshDisplay(mesh, pointSets[i], false);
 		plot->setDisplay(toScreen, "morphing", Size(0, 0), canvas, color);

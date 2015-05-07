@@ -206,42 +206,61 @@ vector< vector<int> > getPolygon(Mat mat, Point start, PointSet& polygon, const 
 	return orderAtThisPoint;
 }
 
-float evaluateTriangle(const Point& a, const Point& b, const Point& c)
+float evaluateNegative(const Point& a, const Point& b, const Point& c)
 {
 	float va2vb = sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + .0);
 	float vb2vc = sqrt((b.x - c.x) * (b.x - c.x) + (b.y - c.y) * (b.y - c.y) + .0);
 	float va2vc = sqrt((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y) + .0);
-	
-	// negative score
-	if (va2vb + va2vc <= vb2vc || va2vb + vb2vc <= va2vc || va2vc + vb2vc <= va2vb){	// 先检查是否构成三角形。 4.25
-		return -10;
-	}
 	float minEdge = min(min(va2vb, vb2vc), va2vc);
 	float maxEdge = max(max(va2vb, vb2vc), va2vc);
+	float twoEdges = va2vb + vb2vc + va2vc - maxEdge;
+	int maxLength = 100;
+	int minLength = 5;
+	if (va2vb + va2vc <= vb2vc || va2vb + vb2vc <= va2vc || va2vc + vb2vc <= va2vb){	// 先检查是否构成三角形。 4.25
+		return -100;
+	}
 	if (maxEdge / minEdge >= 10){	// 过于瘦高
 		//cout << "too thin" << endl;
-		return -5;
+		return -50;
 	}
-	float twoEdges = va2vb + vb2vc + va2vc - maxEdge;
 	if ((twoEdges - maxEdge) / maxEdge <= 0.05){		// 过于矮胖	// 是否会出现这种情况？因为有两个点是挨得比较近的。 4.15	// 确实会出现。 4.25
 		//cout << "too short" << endl;
-		return -5;
+		return -50;
 	}
-	int minLength = 5;
 	if (va2vb < minLength && va2vc < minLength && vb2vc < minLength){	// 三条边都小于，认为三角形太小。允许存在一条边小于。 4.26
 		//cout << "too small" << endl;
-		return -1;
+		return -10;
 	}
-	int maxLength = 100;
 	if (va2vb > maxLength || va2vc > maxLength || vb2vc > maxLength){	// 三条边有一条大于，认为三角形太大。 4.27
 		// cout << "too big" << endl;
-		return -1;
+		return -10;
 	}
-	
-	// positive score
+	return 0;	// 表示符合基本要求
+}
+
+float evaluatePositive(const Point& a, const Point& b, const Point& c)
+{
+	float va2vb = sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + .0);
+	float vb2vc = sqrt((b.x - c.x) * (b.x - c.x) + (b.y - c.y) * (b.y - c.y) + .0);
+	float va2vc = sqrt((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y) + .0);
+	float minEdge = min(min(va2vb, vb2vc), va2vc);
+	float maxEdge = max(max(va2vb, vb2vc), va2vc);
+	int maxLength = 100;
+	int minLength = 5;
 	int score = 0;
-	score += min(va2vb, va2vc) / max(va2vb, va2vc) * 10 + min(va2vb, vb2vc) / max(va2vb, vb2vc) * 10 + min(vb2vc, va2vc) / max(vb2vc, va2vc) * 10;
+	//score += min(va2vb, va2vc) / max(va2vb, va2vc) * 10 + min(va2vb, vb2vc) / max(va2vb, vb2vc) * 10 + min(vb2vc, va2vc) / max(vb2vc, va2vc) * 10;
+	score += minEdge / maxLength * 50;	// 三角形越大影响越大。 4.29
 	return score;
+}
+
+float evaluateTriangle(const Point& a, const Point& b, const Point& c)
+{
+	int score = evaluateNegative(a, b, c);
+	if (score >= 0){
+		score = evaluatePositive(a, b, c);
+	}
+	return score;
+	
 }
 
 TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints, const vector<int>& strokeEndAtVertex)
@@ -269,30 +288,40 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		strokeDistance[i] = new int[numStroke];
 		strokeNearPoint[i] = new Pair[numStroke];
 	}
-	const int minThreshold = 900;	// 避免两个笔画连在一起导致找到的两点距离太近或重合。 4.27
+	int averageStrokeDistance = 0;
+	int averageCnt = 0;
+	const int minThreshold = 1500;	// 避免两个笔画连在一起导致找到的两点距离太近或重合。 4.27
 	for (int i = 0; i < numStroke; i++){
 		for (int j = 0; j < numStroke; j++){
 			strokeDistance[i][j] = infinity;
-			if (i == j)	continue;
+			if (j <= i)	continue;
 			int minIdxA = -1, minIdxB = -1, minDist = infinity;
 			for (int m = (i == 0) ? 0 : strokeEndAtVertex[i - 1] + 1; m <= strokeEndAtVertex[i]; m++){
 				for (int n = (j == 0) ? 0 : strokeEndAtVertex[j - 1] + 1; n <= strokeEndAtVertex[j]; n++){
 					Point diff = sourcePoints[m] - sourcePoints[n];
 					int dist = diff.x * diff.x + diff.y * diff.y;
-					if (dist < minDist && dist > minThreshold){	// 距离过近的不要
+					if (dist < minDist && dist > minThreshold){
+						if (dist < minThreshold)
+						{
+							continue;
+						}	// 距离过近的不要
 						minDist = dist;
 						minIdxA = m;
 						minIdxB = n;
 					}
 				}
 			}
-			strokeDistance[i][j] = minDist;
+			strokeDistance[i][j] = strokeDistance[j][i] = minDist;
 			strokeNearPoint[i][j] = Pair(minIdxA, minIdxB);
+			strokeNearPoint[j][i] = Pair(minIdxB, minIdxB);
+			averageStrokeDistance += minDist;
+			averageCnt++;
 #ifdef VERBOSE
 			cout << "stroke " << i << " to stroke " << j << " min dist: " << minDist << endl;
 #endif
 		}
 	}
+	averageStrokeDistance /= averageCnt;	// 平均距离
 
 	UnionFindSet *ufs = new UnionFindSet(numStroke);
 	vector<int> parts;
@@ -347,17 +376,17 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		int vc;
 
 		vector<int> candidatePoints;
-		for (int i = 1; i <= kNumSample; i++){
-			candidatePoints.push_back((va - startPosA + i + numPointsA) % numPointsA + startPosA);
-			candidatePoints.push_back((va - startPosA - i + numPointsA) % numPointsA + startPosA);
-			candidatePoints.push_back((vb - startPosB + i + numPointsB) % numPointsB + startPosB);
-			candidatePoints.push_back((vb - startPosB - i + numPointsB) % numPointsB + startPosB);
+		for (int i = startPosA; i <= endPosA; i++){
+			candidatePoints.push_back(i);
+		}
+		for (int i = startPosB; i <= endPosB; i++){
+			candidatePoints.push_back(i);
 		}
 		int bestIdx = -1;
 		float bestScore = -1 * infinity;
 		for (int i = 0; i < candidatePoints.size(); i++){
 			int vtemp = candidatePoints[i];
-			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp])/* + evaluateTriangle(targetPoints[va], targetPoints[vb], targetPoints[vtemp])*/;
+			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp]) + evaluateNegative(targetPoints[va], targetPoints[vb], targetPoints[vtemp]) / 2;
 			if (score > bestScore){
 				bestScore = score;
 				bestIdx = candidatePoints[i];
@@ -368,6 +397,9 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		connectTri.push_back(Triangle(va, vb, vc));
 		connected[minStrokeIdxA][minStrokeIdxB] = true;
 		connected[minStrokeIdxB][minStrokeIdxA] = true;
+#ifdef VERBOSE
+		cout << "connect " << minStrokeIdxA << " and " << minStrokeIdxB << endl;
+#endif
 		ufs->makeUnion(minStrokeIdxA, minStrokeIdxB);
 
 		numPart = ufs->getParents(parts);
@@ -378,23 +410,24 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 	// 对距离特别近（达到某个阈值）但已经在一个集合中的笔画也建立连接三角形。 4.26
 	int before = connectTri.size();
 	cout << "extra step of generating connection triangle" << endl;
-	int threshold = 3000;	// 平方距离
-	int max_extra = 2 * numStroke;	// 最多添加多少个
+	int threshold = averageStrokeDistance;	// 平方距离
+	cout << "threshold = " << threshold << endl;
+	int max_extra = numStroke;	// 最多添加多少个
 	int extra_cnt = 0;
 	auto compare = [strokeDistance](Pair sp1, Pair sp2) { return strokeDistance[sp1.a][sp1.b] > strokeDistance[sp2.a][sp2.b]; };
 	priority_queue<Pair, vector<Pair>, decltype(compare)> strokePairs(compare);
 	for (int i = 0; i < numStroke; i++){
-		for (int j = 0; j < numStroke; j++){
-			if (i == j || connected[i][j])	continue;
+		for (int j = i + 1; j < numStroke; j++){
+			if (connected[i][j])	continue;
 			if (strokeDistance[i][j] < threshold){
 				Pair pointPair = strokeNearPoint[i][j];
 				Point diff = targetPoints[pointPair.a] - targetPoints[pointPair.b];
-				if (diff.x * diff.x + diff.y * diff.y < 1.5 * threshold){	// 也判断笔画在目标字形中的距离
+				if (diff.x * diff.x + diff.y * diff.y < 3 * threshold){	// 也判断笔画在目标字形中的距离
 					strokePairs.push(Pair(i, j));
 				}
 			}
 		}
-	} 
+	}
 	while (!strokePairs.empty() && extra_cnt < max_extra){
 		Pair& sp = strokePairs.top();
 		strokePairs.pop();
@@ -412,17 +445,17 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		int vc;
 
 		vector<int> candidatePoints;
-		for (int i = 1; i <= kNumSample; i++){
-			candidatePoints.push_back((va - startPosA + i + numPointsA) % numPointsA + startPosA);
-			candidatePoints.push_back((va - startPosA - i + numPointsA) % numPointsA + startPosA);
-			candidatePoints.push_back((vb - startPosB + i + numPointsB) % numPointsB + startPosB);
-			candidatePoints.push_back((vb - startPosB - i + numPointsB) % numPointsB + startPosB);
+		for (int i = startPosA; i <= endPosA; i++){
+			candidatePoints.push_back(i);
+		}
+		for (int i = startPosB; i <= endPosB; i++){
+			candidatePoints.push_back(i);
 		}
 		int bestIdx = -1;
 		float bestScore = -1 * infinity;
 		for (int i = 0; i < candidatePoints.size(); i++){
 			int vtemp = candidatePoints[i];
-			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp])/* + evaluateTriangle(targetPoints[va], targetPoints[vb], targetPoints[vtemp])*/;
+			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp]) + evaluateNegative(targetPoints[va], targetPoints[vb], targetPoints[vtemp]) / 2;
 			if (score > bestScore){
 				bestScore = score;
 				bestIdx = candidatePoints[i];
@@ -448,6 +481,123 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 	return connectTri;
 }
 
+int APointOnWhichSideOfALineSegment(int x, int y, int xx1, int yy1, int xx2, int yy2)
+{
+	float judge;
+	judge = (float)(y - yy1)*(float)(xx2 - xx1) - (float)(x - xx1)*(float)
+		(yy2 - yy1);
+	if (judge > 1.0) {
+		return 1;
+	}
+	if (fabs(judge) <= 1.0) {
+		return 0;
+	}
+	return -1;
+}
+
+bool GetIntersectPointOfTwoLineSegments(int x0, int y0, int x1, int y1, int xx1, int yy1, int xx2, int yy2, Point& p_point)
+{
+	int a0, a1, a2, a3;
+	float a, b, c, d, bb;
+
+	// boundary conditions: if the length of the line is less than 2.
+	if ((abs(xx1 - xx2) < 2) && (abs(yy1 - yy2) < 2)) {
+		return false;
+	}
+	if ((abs(x0 - x1) < 2) && (abs(y0 - y1) < 2)) {
+		return false;
+	}
+
+	// judge relationship among points and line segments.
+	a0 = APointOnWhichSideOfALineSegment(x0, y0, xx1, yy1, xx2, yy2);
+	a1 = APointOnWhichSideOfALineSegment(x1, y1, xx1, yy1, xx2, yy2);
+	a2 = APointOnWhichSideOfALineSegment(xx1, yy1, x0, y0, x1, y1);
+	a3 = APointOnWhichSideOfALineSegment(xx2, yy2, x0, y0, x1, y1);
+
+	// if the two line segments are intersectant.
+	//(a0 != 0) && (a1 != 0) && (a2 != 0) && (a3 != 0) && 
+	if ((a0 != a1) && (a2
+		!= a3)) {
+		// calculate point of intersection.
+		a = x1 - x0;
+		b = y1 - y0;
+		c = xx2 - xx1;
+		d = yy2 - yy1;
+		bb = b *(float)c - a *(float)d;
+		p_point.x = (int)(0.5 + (a *c *(float)(yy1 - y0) + b *c *(float)x0
+			- a *d *(float)xx1) / bb);
+		p_point.y = (int)(0.5 + (d *b *(float)(x0 - xx1) + b *c *(float)
+			yy1 - d *a *(float)y0) / bb);
+
+		if ((p_point.x == x0) && (p_point.y == y0)) {
+			return true;
+		}
+		if ((p_point.x == x1) && (p_point.y == y1)) {
+			return true;
+		}
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPointSet)
+{
+	const PointSet& X = dataPointSet, Y = templatePointSet;
+	int **distX2Y = new int*[X.size()];
+	for (int i = 0; i < X.size(); i++){
+		distX2Y[i] = new int[Y.size()];
+	}
+	for (int i = 0; i < X.size(); i++){
+		for (int j = 0; j < Y.size(); j++){
+			Point diff = X[i] - Y[j];
+			distX2Y[i][j] = diff.x * diff.x + diff.y * diff.y;
+			if (X[i] == Y[j])	continue;
+			for (int k = 0; k < Y.size(); k++){
+				if (k == j || (k + 1) % Y.size() == j)	continue;
+				Point l0 = Y[k], l1 = Y[(k + 1) % Y.size()];
+				Point crossPnt;
+				bool intersect = GetIntersectPointOfTwoLineSegments(X[i].x, X[i].y, Y[j].x, Y[j].y, l0.x, l0.y, l1.x, l1.y, crossPnt);
+				if (intersect){
+					distX2Y[i][j] = infinity;
+				}
+				/*cout << "" << i << "-> " << j << ": intersect: " << intersect << endl;
+				Mat paint(500, 500, CV_8UC3);
+				circle(paint, X[i], 3, Scalar(255, 0, 0));
+				circle(paint, Y[j], 3, Scalar(0, 255, 0));
+				line(paint, X[i], Y[j], Scalar(0, 255, 0));
+				line(paint, l0, l1, Scalar(0, 0, 255));
+				imshow("", paint); waitKey();*/
+			}
+		}
+	}
+	PointSet keyPoints;
+	int *vertexBelongToTemplate = new int[X.size()];
+	for (int i = 0; i < X.size(); i++)	vertexBelongToTemplate[i] = -1;
+	for (int i = 0; i < Y.size(); i++){
+		int minDist = infinity, index = -1;
+		for (int j = index + 1; j < X.size(); j++){	// 保证顺序。 5.6
+			if (vertexBelongToTemplate[j] < 0/* && vertexBelongToTemplate[(j - 1 + XSize) % XSize] < 0 && vertexBelongToTemplate[( j + 1) % XSize] < 0*/){	// 尚未确定该点的对应关系
+				int dist = distX2Y[j][i]/*(X[j].x - Y[i].x)*(X[j].x - Y[i].x) + (X[j].y - Y[i].y)*(X[j].y - Y[i].y)*/;
+				if (dist < minDist){
+					minDist = dist;
+					index = j;
+				}
+			}
+		}
+		vertexBelongToTemplate[index] = i;
+		keyPoints.push_back(X[index]);
+	}
+	delete[] vertexBelongToTemplate;
+	for (int i = 0; i < X.size(); i++){
+		delete[] distX2Y[i];
+	}
+	delete[] distX2Y;
+	cout << keyPoints.size() << " key points." << endl;
+	return keyPoints;
+}
+
 PointSet getSamplePoints(const PointSet& polygon, int targetPolygonSize, double keyPointsInterval, int numSample)
 {
 	PointSet samplePoints;
@@ -471,20 +621,6 @@ PointSet getSamplePoints(const PointSet& polygon, int targetPolygonSize, double 
 		for (int j = 0; j < numSample; j++){
 			int pointIndex = floor(basePosition + sampleStep * j);
 			samplePoints.push_back(polygon[pointIndex]);
-//			// replace regular sample points by the corner points
-//			for (int p = 1; p <= sampleStep * 1.2 - 1; p++){
-//				int index = floor(fmod(basePosition + sampleStep * (j - .6) + p + polygon.size(), polygon.size()));
-//				Point pnt = polygon[index];
-//				if (cornerFlag[pnt.y][pnt.x]){
-//#ifdef VERBOSE
-//					cout << "replace corner (" << pnt.x << ", " << pnt.y << ")" << endl;
-//#endif
-//					cornerFlag[pnt.y][pnt.x] = false;
-//					samplePoints.pop_back();
-//					samplePoints.push_back(pnt);
-//					break;
-//				}
-//			}
 		}
 	}
 	return samplePoints;
@@ -540,6 +676,56 @@ void useCornerPoints(const PointSet& polygon, const PointSet& corners, PointSet&
 	}
 	delete[] used;
 	delete[] pointOrder;
+}
+
+bool moveSamplePoints(const PointSet& polygon, PointSet& points)
+{
+	const float sampleGap = kKeyPointsInterval / kNumSample;
+	const float minSampleGap = sampleGap * 2 / 3;
+	int numPoints = points.size();
+	int polygonLength = polygon.size();
+	int *order = new int[numPoints];
+	for (int i = 0; i < numPoints; i++){
+		order[i] = std::find(polygon.begin(), polygon.end(), points[i]) - polygon.begin();
+		assert(order[i] != polygonLength);
+	}
+	int reach = 0;
+	bool moved = false;
+	int startPos = 0, startOrder, endPos, endOrder;
+	while(startPos < numPoints && startPos > reach){	// 保证只遍历一次
+		cout << startPos << endl;
+		endPos = (startPos + 1) % points.size();
+		startOrder = order[startPos];
+		endOrder = order[endPos];
+		int dist = (endOrder - startOrder + polygonLength) % polygonLength;
+		if (dist > minSampleGap){
+			startPos++;
+			continue;
+		}
+		bool rightFound = false;
+		while (!rightFound && endPos < numPoints){
+			int tempOrder = endOrder;
+			endPos = (endPos + 1 + numPoints) % numPoints;
+			endOrder = order[endPos];
+			if (endOrder < tempOrder)	return false;	// 确实会出现这种情况！老子不伺候了！
+			dist = (endOrder - tempOrder + polygonLength) % polygonLength;
+			if (dist >= sampleGap)	rightFound = true;
+			if (startPos == endPos)	break;
+		}
+		if (!rightFound || startPos == endPos)	break;
+		int intervalCount = (endPos - startPos + numPoints) % numPoints;
+		float intervalLength = (endOrder - startOrder + polygonLength) % polygonLength;
+		float avgDist = intervalLength / intervalCount;
+		for (int j = 1; j <= intervalCount; j++){
+			//cout << "move (" << points[(startPos + j) % numPoints].x << ", " << points[(startPos + j) % numPoints].y << ") to (" << polygon[(int)(startOrder + avgDist * j) % polygonLength].x << ", " << polygon[(int)(startOrder + avgDist * j) % polygonLength].y << ")" << endl;
+			points[(startPos + j) % numPoints] = polygon[(int)(startOrder + avgDist * j) % polygonLength];
+			moved = true;
+		}
+		reach = startPos;
+		startPos = endPos;
+	}
+	delete[] order;
+	return moved;
 }
 
 
