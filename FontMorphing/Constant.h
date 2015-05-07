@@ -3,7 +3,7 @@
 #include <string>
 #include <limits>
 
-#define DEMO_MODE
+//#define DEMO_MODE
 #define CPD_FROM_FILE
 //#define VERBOSE
 #define PARALLEL_MODE

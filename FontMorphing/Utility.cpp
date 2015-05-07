@@ -238,29 +238,49 @@ float evaluateNegative(const Point& a, const Point& b, const Point& c)
 	return 0;	// 表示符合基本要求
 }
 
-float evaluatePositive(const Point& a, const Point& b, const Point& c)
+bool sameDirection(const Point& u, const Point& v)
 {
-	float va2vb = sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + .0);
-	float vb2vc = sqrt((b.x - c.x) * (b.x - c.x) + (b.y - c.y) * (b.y - c.y) + .0);
-	float va2vc = sqrt((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y) + .0);
-	float minEdge = min(min(va2vb, vb2vc), va2vc);
-	float maxEdge = max(max(va2vb, vb2vc), va2vc);
-	int maxLength = 100;
-	int minLength = 5;
-	int score = 0;
-	//score += min(va2vb, va2vc) / max(va2vb, va2vc) * 10 + min(va2vb, vb2vc) / max(va2vb, vb2vc) * 10 + min(vb2vc, va2vc) / max(vb2vc, va2vc) * 10;
-	score += minEdge / maxLength * 50;	// 三角形越大影响越大。 4.29
-	return score;
+	if (u.x * v.x > 0 && u.y * v.y > 0)	return true;
+	return false;
 }
 
-float evaluateTriangle(const Point& a, const Point& b, const Point& c)
+float cosineSimilarity(const Point& ua, const Point& ub, const Point& va, const Point& vb)
+{
+	// cosine similarity = cos(u, v) = u * v / (|u| |v|)
+	Point u = ub - ua;
+	Point v = vb - va;
+	auto dot = [] (const Point& u, const Point& v) -> float { return u.x * v.x + u.y * v.y; };	// lambda表达式好棒！
+	return dot(u, v) / (sqrt(dot(u, u)) * sqrt(dot(v, v)));
+}
+
+float evaluateTriangle(const Point& a, const Point& b, const Point& c, const Point& ta, const Point& tb, const Point& tc)
 {
 	int score = evaluateNegative(a, b, c);
 	if (score >= 0){
-		score = evaluatePositive(a, b, c);
+		// 判断向量方向
+		Point vab = b - a, tvab = tb - ta;
+		Point vbc = c - b, tvbc = tc - tb;
+		Point vca = a - c, tvca = ta - tc;
+		//int directThreshold = 10;
+		int vectorScore = 50;
+		if (sameDirection(vab, tvab)){ score += vectorScore; }
+		if (sameDirection(vbc, tvbc)){ score += vectorScore; }
+		if (sameDirection(vca, tvca)){ score += vectorScore; }
+
+		//score += min(va2vb, va2vc) / max(va2vb, va2vc) * 10 + min(va2vb, vb2vc) / max(va2vb, vb2vc) * 10 + min(vb2vc, va2vc) / max(vb2vc, va2vc) * 10;	// 这种评判没有道理
+		
+		// 边向量的方向进行评判
+		score += (cosineSimilarity(a, b, ta, tb) + cosineSimilarity(b, c, tb, tc) + cosineSimilarity(c, a, tc, ta)) / 3 * 100;
+
+		// 评判三角形大小
+		float va2vb = sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + .0);
+		float vb2vc = sqrt((b.x - c.x) * (b.x - c.x) + (b.y - c.y) * (b.y - c.y) + .0);
+		float va2vc = sqrt((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y) + .0);
+		float minEdge = min(min(va2vb, vb2vc), va2vc);
+		int maxLength = 100;
+		score += minEdge / maxLength * 50;	// 三角形越大影响越大。 4.29
 	}
 	return score;
-	
 }
 
 TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints, const vector<int>& strokeEndAtVertex)
@@ -299,7 +319,12 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 			for (int m = (i == 0) ? 0 : strokeEndAtVertex[i - 1] + 1; m <= strokeEndAtVertex[i]; m++){
 				for (int n = (j == 0) ? 0 : strokeEndAtVertex[j - 1] + 1; n <= strokeEndAtVertex[j]; n++){
 					Point diff = sourcePoints[m] - sourcePoints[n];
+					Point tdiff = targetPoints[m] - targetPoints[n];
 					int dist = diff.x * diff.x + diff.y * diff.y;
+					if (!sameDirection(diff, tdiff)){	// 尽量不选择源字形和目标字形形成的向量方向不同的两个点
+						dist *= 10;
+						if (dist < 0)	dist = infinity;	// 防止溢出，考虑的好周全
+					}
 					if (dist < minDist && dist > minThreshold){
 						if (dist < minThreshold)
 						{
@@ -321,7 +346,9 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 #endif
 		}
 	}
-	averageStrokeDistance /= averageCnt;	// 平均距离
+	if (averageCnt > 0){	// 一个笔画的情况特殊处理
+		averageStrokeDistance /= averageCnt;	// 平均距离
+	}
 
 	UnionFindSet *ufs = new UnionFindSet(numStroke);
 	vector<int> parts;
@@ -386,7 +413,8 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		float bestScore = -1 * infinity;
 		for (int i = 0; i < candidatePoints.size(); i++){
 			int vtemp = candidatePoints[i];
-			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp]) + evaluateNegative(targetPoints[va], targetPoints[vb], targetPoints[vtemp]) / 2;
+			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp], targetPoints[va], targetPoints[vb], targetPoints[vtemp])
+				+ evaluateNegative(targetPoints[va], targetPoints[vb], targetPoints[vtemp]) / 2;
 			if (score > bestScore){
 				bestScore = score;
 				bestIdx = candidatePoints[i];
@@ -455,7 +483,8 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 		float bestScore = -1 * infinity;
 		for (int i = 0; i < candidatePoints.size(); i++){
 			int vtemp = candidatePoints[i];
-			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp]) + evaluateNegative(targetPoints[va], targetPoints[vb], targetPoints[vtemp]) / 2;
+			int score = evaluateTriangle(sourcePoints[va], sourcePoints[vb], sourcePoints[vtemp], targetPoints[va], targetPoints[vb], targetPoints[vtemp])
+				+ evaluateNegative(targetPoints[va], targetPoints[vb], targetPoints[vtemp]) / 2;
 			if (score > bestScore){
 				bestScore = score;
 				bestIdx = candidatePoints[i];
@@ -495,7 +524,7 @@ int APointOnWhichSideOfALineSegment(int x, int y, int xx1, int yy1, int xx2, int
 	return -1;
 }
 
-bool GetIntersectPointOfTwoLineSegments(int x0, int y0, int x1, int y1, int xx1, int yy1, int xx2, int yy2, Point& p_point)
+bool getIntersectPointOfTwoLineSegments(int x0, int y0, int x1, int y1, int xx1, int yy1, int xx2, int yy2, Point& p_point)
 {
 	int a0, a1, a2, a3;
 	float a, b, c, d, bb;
@@ -558,7 +587,7 @@ PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPoi
 				if (k == j || (k + 1) % Y.size() == j)	continue;
 				Point l0 = Y[k], l1 = Y[(k + 1) % Y.size()];
 				Point crossPnt;
-				bool intersect = GetIntersectPointOfTwoLineSegments(X[i].x, X[i].y, Y[j].x, Y[j].y, l0.x, l0.y, l1.x, l1.y, crossPnt);
+				bool intersect = getIntersectPointOfTwoLineSegments(X[i].x, X[i].y, Y[j].x, Y[j].y, l0.x, l0.y, l1.x, l1.y, crossPnt);
 				if (intersect){
 					distX2Y[i][j] = infinity;
 				}
