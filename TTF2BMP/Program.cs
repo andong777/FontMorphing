@@ -34,7 +34,7 @@ namespace TTF2BMP
 
         static void Main(string[] args)
         {
-            string fontName = @"../../方正清刻本悦宋简体.TTF";
+            string fontName = @"../../simfang.TTF";
             string characterList = @"../../639.txt";
             string GBNumberList = @"../../GB639.txt";
             string outputPath = Path.Combine(@"E:\split", Path.GetFileNameWithoutExtension(fontName));
@@ -64,7 +64,7 @@ namespace TTF2BMP
                 string no = GBNumbers[i];
                 Console.WriteLine(c + ": " + no);
                 Bitmap bmp = converter.Convert(c);
-                bmp.Save(Path.Combine(@outputPath, no + ".jpg"), ImageFormat.Jpeg);
+                bmp.Save(Path.Combine(@outputPath, no + "_R.bmp"), ImageFormat.Bmp);
                 bmp.Dispose();
             }       
         }

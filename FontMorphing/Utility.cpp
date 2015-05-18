@@ -58,11 +58,14 @@ Mat getEdge(Mat& mat, PointSet& contour)
 	findContours(filled, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
 	vector<PointSet> contoursSmoothed(contours.size());
 	for (int i = 0; i < contours.size(); i++){
-		approxPolyDP(contours[i], contoursSmoothed[i], 3, true);
-		drawContours(edge, contoursSmoothed, i, Scalar::all(255), 1);
+		//approxPolyDP(contours[i], contoursSmoothed[i], 3, true);
+		drawContours(edge, contours, i, Scalar::all(255), 1);
+		//drawContours(edge, contoursSmoothed, i, Scalar::all(255), 1);
 	}
 	cvtColor(edge, edge, CV_BGR2GRAY);
-	//imshow("edge", edge); waitKey();
+#ifdef VERBOSE
+	imwrite("edge.jpg", edge);
+#endif
 	int idx = 0, maxCount = -1;
 	for (int i = 0; i < contours.size(); i++){	// 处理孤立点的情况。（见楷体“掣”字） 4.27
 		if ((int)contours[i].size() > maxCount){
@@ -71,6 +74,7 @@ Mat getEdge(Mat& mat, PointSet& contour)
 		}
 	}
 	contour.insert(contour.end(), contours[idx].begin(), contours[idx].end());
+	//contour.insert(contour.end(), contoursSmoothed[idx].begin(), contoursSmoothed[idx].end());
 #ifdef VERBOSE
 	cout << "There are " << contour.size() << " points on the polygon" << endl;
 	cout << "start point (" << contour[0].x << ", " << contour[0].y << ")" << endl;
@@ -88,7 +92,8 @@ vector< vector<bool> > getCornerPoints(const Mat& mat, const PointSet& polygon, 
 			cornerFlag[i][j] = false;
 		}
 	}
-	goodFeaturesToTrack(mat, outputCorners, 20, .05, 20, Mat(), 5, true, .1);
+	goodFeaturesToTrack(mat, outputCorners, 15, .05, 10, Mat(), 5, true, .1);	// 注意是对笔画检测角点，参考仿宋复杂笔画角点很多
+	//goodFeaturesToTrack(mat, outputCorners, 20, .05, 20, Mat(), 5, true, .1);
 	Mat mat2draw = mat.clone();
 	for (int i = 0; i < outputCorners.size(); i++){
 		Point& corner = outputCorners[i];
@@ -217,23 +222,23 @@ float evaluateNegative(const Point& a, const Point& b, const Point& c)
 	int maxLength = 100;
 	int minLength = 5;
 	if (va2vb + va2vc <= vb2vc || va2vb + vb2vc <= va2vc || va2vc + vb2vc <= va2vb){	// 先检查是否构成三角形。 4.25
-		return -100;
+		return -500;
 	}
 	if (maxEdge / minEdge >= 10){	// 过于瘦高
 		//cout << "too thin" << endl;
-		return -50;
+		return -100;
 	}
 	if ((twoEdges - maxEdge) / maxEdge <= 0.05){		// 过于矮胖	// 是否会出现这种情况？因为有两个点是挨得比较近的。 4.15	// 确实会出现。 4.25
 		//cout << "too short" << endl;
-		return -50;
+		return -100;
 	}
 	if (va2vb < minLength && va2vc < minLength && vb2vc < minLength){	// 三条边都小于，认为三角形太小。允许存在一条边小于。 4.26
 		//cout << "too small" << endl;
-		return -10;
+		return -50;
 	}
 	if (va2vb > maxLength || va2vc > maxLength || vb2vc > maxLength){	// 三条边有一条大于，认为三角形太大。 4.27
 		// cout << "too big" << endl;
-		return -10;
+		return -50;
 	}
 	return 0;	// 表示符合基本要求
 }
@@ -582,7 +587,6 @@ PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPoi
 		for (int j = 0; j < Y.size(); j++){
 			Point diff = X[i] - Y[j];
 			distX2Y[i][j] = diff.x * diff.x + diff.y * diff.y;
-			if (X[i] == Y[j])	continue;
 			for (int k = 0; k < Y.size(); k++){
 				if (k == j || (k + 1) % Y.size() == j)	continue;
 				Point l0 = Y[k], l1 = Y[(k + 1) % Y.size()];
@@ -591,24 +595,17 @@ PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPoi
 				if (intersect){
 					distX2Y[i][j] = infinity;
 				}
-				/*cout << "" << i << "-> " << j << ": intersect: " << intersect << endl;
-				Mat paint(500, 500, CV_8UC3);
-				circle(paint, X[i], 3, Scalar(255, 0, 0));
-				circle(paint, Y[j], 3, Scalar(0, 255, 0));
-				line(paint, X[i], Y[j], Scalar(0, 255, 0));
-				line(paint, l0, l1, Scalar(0, 0, 255));
-				imshow("", paint); waitKey();*/
 			}
 		}
 	}
 	PointSet keyPoints;
 	int *vertexBelongToTemplate = new int[X.size()];
 	for (int i = 0; i < X.size(); i++)	vertexBelongToTemplate[i] = -1;
-	for (int i = 0; i < Y.size(); i++){
+	for (int i = 0; i < Y.size(); i+=kNumSample){	// +=kNumSample表示只匹配关键点，+=1表示匹配所有点
 		int minDist = infinity, index = -1;
-		for (int j = index + 1; j < X.size(); j++){	// 保证顺序。 5.6
-			if (vertexBelongToTemplate[j] < 0/* && vertexBelongToTemplate[(j - 1 + XSize) % XSize] < 0 && vertexBelongToTemplate[( j + 1) % XSize] < 0*/){	// 尚未确定该点的对应关系
-				int dist = distX2Y[j][i]/*(X[j].x - Y[i].x)*(X[j].x - Y[i].x) + (X[j].y - Y[i].y)*(X[j].y - Y[i].y)*/;
+		for (int j = 0; j < X.size(); j++){
+			if (vertexBelongToTemplate[j] < 0){	// 尚未确定该点的对应关系
+				int dist = distX2Y[j][i];
 				if (dist < minDist){
 					minDist = dist;
 					index = j;
@@ -655,21 +652,34 @@ PointSet getSamplePoints(const PointSet& polygon, int targetPolygonSize, double 
 	return samplePoints;
 }
 
+// key points -> sample points.
 PointSet getSamplePoints(const PointSet& polygon, PointSet& keyPoints, int numSample)
 {
 	PointSet samplePoints;
+	// 首先将keyPoints排序。因为可能出现本来逆时针，CPD匹配过来后变成顺时针，导致采样全乱的情况。 5.13
+	int kpHeadPos = std::find(polygon.begin(), polygon.end(), keyPoints[0]) - polygon.begin();;
+	std::sort(keyPoints.begin(), keyPoints.end(), [polygon, kpHeadPos](Point& p1, Point& p2) -> int {
+		// 注意这里并不能按绝对的顺序排序，而应该是按相对第一个关键点的顺序，这样才能保证第一个点还是排序后的第一个点。 5.13
+		int p1OrderToKpHead = std::find(polygon.begin(), polygon.end(), p1) - polygon.begin() - kpHeadPos;
+		int p2OrderToKpHead = std::find(polygon.begin(), polygon.end(), p2) - polygon.begin() - kpHeadPos;
+		if (p1OrderToKpHead < 0)	p1OrderToKpHead += polygon.size();
+		if (p2OrderToKpHead < 0)	p2OrderToKpHead += polygon.size();
+		return p1OrderToKpHead < p2OrderToKpHead;
+	});
 	for (int i = 0; i < keyPoints.size(); i++){
 		int i2 = (i + 1) % keyPoints.size();	// 下一个关键点
-		samplePoints.push_back(keyPoints[i]);
 		int kp1Order = std::find(polygon.begin(), polygon.end(), keyPoints[i]) - polygon.begin();
 		int kp2Order = std::find(polygon.begin(), polygon.end(), keyPoints[i2]) - polygon.begin();
 		assert(kp1Order >= 0 && kp2Order >= 0);
-		//cout << "kp1: " << kp1Order << " kp2: " << kp2Order << endl;
+#ifdef VERBOSE
+		cout << "kp1: " << kp1Order << " kp2: " << kp2Order << endl;
+#endif
 		int dist = (kp2Order + polygon.size() - kp1Order) % polygon.size();	// 考虑跨越起点的情况
 		if (dist == 0)	dist = polygon.size();	// 对只有一个关键点的情况特殊处理 4.16
-		double numIntervalPoints = double(dist / numSample);
-		for (int j = 1; j < numSample; j++){
+		double numIntervalPoints = double(dist) / numSample;	// 原来的写法是错的！double(dist / numSample) 5.12
+		for (int j = 0; j < numSample; j++){
 			int index = floor(fmod(kp1Order + numIntervalPoints * j + polygon.size(), polygon.size()));
+			//cout << index << ", ";
 			samplePoints.push_back(polygon[index]);
 		}
 	}
@@ -707,10 +717,12 @@ void useCornerPoints(const PointSet& polygon, const PointSet& corners, PointSet&
 	delete[] pointOrder;
 }
 
+// deprecated. no significant effects.
 bool moveSamplePoints(const PointSet& polygon, PointSet& points)
 {
 	const float sampleGap = kKeyPointsInterval / kNumSample;
 	const float minSampleGap = sampleGap * 2 / 3;
+	const float endSearchThreshold = sampleGap * 3 / 2;
 	int numPoints = points.size();
 	int polygonLength = polygon.size();
 	int *order = new int[numPoints];
@@ -728,20 +740,26 @@ bool moveSamplePoints(const PointSet& polygon, PointSet& points)
 		endOrder = order[endPos];
 		int dist = (endOrder - startOrder + polygonLength) % polygonLength;
 		if (dist > minSampleGap){
-			startPos++;
+			startPos = endPos;
 			continue;
 		}
 		bool rightFound = false;
+		int cend = -1; int maxDist = 0;
 		while (!rightFound && endPos < numPoints){
 			int tempOrder = endOrder;
 			endPos = (endPos + 1 + numPoints) % numPoints;
 			endOrder = order[endPos];
 			if (endOrder < tempOrder)	return false;	// 确实会出现这种情况！老子不伺候了！
 			dist = (endOrder - tempOrder + polygonLength) % polygonLength;
-			if (dist >= sampleGap)	rightFound = true;
+			if (dist >= endSearchThreshold)	rightFound = true;
+			if (dist > maxDist){
+				maxDist = dist;
+				cend = endPos;
+			}
 			if (startPos == endPos)	break;
 		}
-		if (!rightFound || startPos == endPos)	break;
+		if (!rightFound && startPos == endPos)	break;
+		if (!rightFound)	endPos = cend;	// 没找到那么长的，找个差不多的凑合一下吧
 		int intervalCount = (endPos - startPos + numPoints) % numPoints;
 		float intervalLength = (endOrder - startOrder + polygonLength) % polygonLength;
 		float avgDist = intervalLength / intervalCount;

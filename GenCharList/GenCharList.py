@@ -42,7 +42,8 @@ for char_name in chars:
 inf.close()
 if os.path.exists(test_list_file_path):
     backup_file_path = os.path.join(data_dir, test_list_file.split('.')[0] + '.backup')
-    os.remove(backup_file_path)
+    if os.path.exists(backup_file_path):
+        os.remove(backup_file_path)
     os.rename(test_list_file_path, backup_file_path)
 
 outf = open(test_list_file_path, 'w', encoding='utf-8')

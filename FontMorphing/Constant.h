@@ -4,7 +4,7 @@
 #include <limits>
 
 //#define DEMO_MODE
-#define CPD_FROM_FILE
+//#define CPD_FROM_FILE
 //#define VERBOSE
 #define PARALLEL_MODE
 
@@ -27,6 +27,6 @@ extern string targetCharDir;
 extern string charListPath;
 extern string outputCharDir;
 
-static const int kCPDIterateTimes = 25;
-static const int kNumSample = 6;
-static const int kKeyPointsInterval = 50;
+static const int kCPDIterateTimes = 30;
+static const int kNumSample = 15;
+static const int kKeyPointsInterval = 100;

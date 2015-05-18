@@ -28,7 +28,7 @@ ARAPMorphing::~ARAPMorphing()
 void ARAPMorphing::setMorphing(PointSet& source, PointSet& target, TriMesh& mesh, TriMesh& connectTri)
 {
 	// 统一两个字形的大小
-	int srcLeft = 10000, srcRight = 0, srcTop = 10000, srcBottom = 0, srcWidth, srcHeight, srcArea;
+	int srcLeft = 10000, srcRight = 0, srcTop = 10000, srcBottom = 0, srcWidth, srcHeight;
 	for (int i = 0; i < source.size(); i++){
 		Point &p = source[i];
 		if (p.x < srcLeft)	srcLeft = p.x;
@@ -38,9 +38,8 @@ void ARAPMorphing::setMorphing(PointSet& source, PointSet& target, TriMesh& mesh
 	}
 	srcWidth = srcRight - srcLeft;
 	srcHeight = srcBottom - srcTop;
-	srcArea = srcWidth * srcHeight;
 
-	int dstLeft = 10000, dstRight = 0, dstTop = 10000, dstBottom = 0, dstWidth, dstHeight, dstArea;
+	int dstLeft = 10000, dstRight = 0, dstTop = 10000, dstBottom = 0, dstWidth, dstHeight;
 	for (int i = 0; i < target.size(); i++){
 		Point &p = target[i];
 		if (p.x < dstLeft)	dstLeft = p.x;
@@ -50,33 +49,20 @@ void ARAPMorphing::setMorphing(PointSet& source, PointSet& target, TriMesh& mesh
 	}
 	dstWidth = dstRight - dstLeft;
 	dstHeight = dstBottom - dstTop;
-	dstArea = dstWidth * dstHeight;
-	cout << "before: srcLeft = " << srcLeft << ", dstLeft = " << dstLeft << endl;
 
-	PointSet *changedPoints, *fixedPoints;
-	int changedLeftBound, changedTopBound;
-	cout << "srcArea = " << srcArea << ", dstArea = " << dstArea << endl;
-	if (srcArea < dstArea){	// 将小的变大
-		cout << "enlarging source" << endl;
-		changedPoints = &source;
-		changedLeftBound = srcLeft;
-		changedTopBound = srcTop;
+	for (int i = 0; i < source.size(); i++){
+		float widthRatio = float(max(srcWidth, dstWidth)) / srcWidth;
+		float heightRatio = float(max(srcHeight, dstHeight)) / srcHeight;
+		Point &p = source[i];
+		p.x = srcLeft + (p.x - srcLeft) * widthRatio;
+		p.y = srcTop + (p.y - srcTop) * heightRatio;
 	}
-	else if (dstArea < srcArea){
-		cout << "enlarging target" << endl;
-		changedPoints = &target;
-		changedLeftBound = dstLeft;
-		changedTopBound = dstTop;
-	}
-	else{
-		return;	// 面积相同，几乎不可能
-	}
-	float widthRatio = float(max(srcWidth, dstWidth)) / float(min(srcWidth, dstWidth));
-	float heightRatio = float(max(srcHeight, dstHeight)) / float(min(srcHeight, dstHeight));
-	for (int i = 0; i < changedPoints->size(); i++){
-		Point &p = changedPoints->at(i);
-		p.x = changedLeftBound + (p.x - changedLeftBound) * widthRatio;
-		p.y = changedTopBound + (p.y - changedTopBound) * heightRatio;
+	for (int i = 0; i < target.size(); i++){
+		float widthRatio = float(max(srcWidth, dstWidth)) / dstWidth;
+		float heightRatio = float(max(srcHeight, dstHeight)) / dstHeight;
+		Point &p = target[i];
+		p.x = dstLeft + (p.x - dstLeft) * widthRatio;
+		p.y = dstTop + (p.y - dstTop) * heightRatio;
 	}
 
 	MorphingService::setMorphing(source, target, mesh, connectTri);
@@ -249,22 +235,23 @@ void ARAPMorphing::doDisplay()
 	mesh.erase(mesh.end() - connectTri.size(), mesh.end());	// 从三角网格中去除连接三角形
 	for (int i = 0; i < pointSets.size(); i++){
 		Mat originalCanvas = canvas.clone();
-		if (toScreen){
+		/*if (toScreen){
 			ostringstream osss;
 			osss << "step: " << i << " / " << (pointSets.size() - 1);
 			putText(canvas, osss.str(), Point(50, 30), CV_FONT_NORMAL, .5, Scalar(0, 0, 0));
-		}
-		DisplayService *plot = new MeshDisplay(mesh, pointSets[i], false);
+		}*/
+		ostringstream oss;
+		oss << outputCharDir << "\\";
+		DisplayService *plot;
+		plot = new MeshDisplay(mesh, pointSets[i], false);
 		plot->setDisplay(toScreen, "morphing", Size(0, 0), canvas, color);
 		plot->doDisplay();
 		delete plot;
-		ostringstream oss;
-		oss << outputCharDir << "\\";
 		if (pointSets.size() > 1){
-			oss << charName << "_" << (pointSets.size() - 1) << "_" << i << ".jpg";
+			oss << charName << "_" << (pointSets.size() - 1) << "_" << i << ".bmp";
 		}
 		else{	// 只输出一个特定的时刻
-			oss << charName << ".jpg";
+			oss << charName << ".bmp";
 		}
 		imwrite(oss.str(), canvas);
 
@@ -276,10 +263,10 @@ void ARAPMorphing::doDisplay()
 		oss.str(""); oss.clear();
 		oss << outputCharDir << "\\";
 		if (pointSets.size() > 1){
-			oss << charName << "_" << (pointSets.size() - 1) << "_" << i << "F.jpg";
+			oss << charName << "_" << (pointSets.size() - 1) << "_" << i << "F.bmp";
 		}
 		else{	// 只输出一个特定的时刻
-			oss << charName << "F.jpg";
+			oss << charName << "F.bmp";
 		}
 		imwrite(oss.str(), canvas);
 

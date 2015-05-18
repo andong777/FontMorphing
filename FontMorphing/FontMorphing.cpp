@@ -110,19 +110,16 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 			}
 		}
 
+		Point offset = sourceChar.getStrokeOffset(no);
 		PointSet polygon;	//记录多边形上的点
 		Mat edge = getEdge(largerStrokeImg, polygon);	// 边缘检测得到的矩阵，边缘为白色。
-
 		/*for (int i = 0; i < polygon.size(); i++){
-			Point p = polygon[i];
-			p.x += offsetX;
-			p.y += offsetY;
-			circle(sourceCanvas, p, 1, Scalar(0, 0, 0), CV_FILLED);
-		}
-		imshow("source", sourceCanvas); waitKey();*/
+			Point p = polygon[i] + offset;
+			circle(sourceCanvas, p, 1, Scalar(0, 0, 255), CV_FILLED);
+			imshow("source", sourceCanvas); waitKey();
+		}*/
 
 		PointSet corners;
-		Point offset = sourceChar.getStrokeOffset(no);
 		vector< vector<bool> > cornerFlag = getCornerPoints(edge, polygon, corners);
 
 		// 源汉字取样时考虑目标汉字大小。 4.16
@@ -141,17 +138,26 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 		for (auto it = corners.begin(); it != corners.end(); it++){
 			(*it) += offset;
 		}
-		display = new PointsDisplay(corners, 5);
+		/*display = new PointsDisplay(corners, 3);
 		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(255, 0, 0));
 		display->doDisplay();
 		delete display;
+		imwrite(charName + "_corners.jpg", sourceCanvas);*/
 
 		// Plot the polygon
 		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
 			samplePoints[i] += offset;
 		}
+
+		for (int i = 0; i < samplePoints.size(); i += kNumSample){
+			circle(sourceCanvas, samplePoints[i], 4, Scalar(0, 0, 255), CV_FILLED);
+		}
+#ifdef VERBOSE
+		imwrite("src_kp.jpg", sourceCanvas);
+#endif
+
 		display = new PointsDisplay(samplePoints, 2, true);
-		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(0, 0, 255));
+		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(0, 255, 0));
 		display->doDisplay();
 		delete display;
 		
@@ -199,14 +205,18 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 	for (int i = 0; i < numStroke; i++){
 		cout << "stroke " << i << " ends at vertex " << strokeEndAtVertex[i] << endl;
 	}
+	imwrite("src.jpg", sourceCanvas);
 #endif
 	cout << endl << "There are " << sourceCharVert.size() << " points in source character." << endl;
 	// get the connection triangles.
 	display = new MeshDisplay(triMesh, sourceCharVert, false);
-	display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(255, 0, 0));
+	display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(0, 255, 0));
 	display->doDisplay();
 	delete display;
 	cout << "There are " << triMesh.size() << " triangles in source character." << endl;
+#ifdef VERBOSE
+	imwrite("src_tri.jpg", sourceCanvas);
+#endif
 }
 
 void FontMorphing::registerPointSetToTargetCharacter(){
@@ -242,10 +252,10 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		for (int i = 0; i < corners.size(); i++){
 			corners2Display[i] = corners[i] + offset;
 		}
-		display = new PointsDisplay(corners2Display, 5);
+		/*display = new PointsDisplay(corners2Display, 3);
 		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(255, 0, 0));
 		display->doDisplay();
-		delete display;
+		delete display;*/
 
 		// CPD registration
 		vector<CPointDouble> X;
@@ -289,9 +299,9 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		}
 		outf.close();
 #endif
-#ifdef DEMO_MODE
+#ifdef VERBOSE
 		for (int i = 0; i<Y.size(); i++){
-			circle(targetCanvas, SGCPDPointToCVPoint(Y[i]), 3, Scalar(0, 255, 0));
+			circle(targetCanvas, SGCPDPointToCVPoint(Y[i]), 2, Scalar(255, 0, 0), CV_FILLED);
 		}
 		imshow("target", targetCanvas); waitKey();
 #endif
@@ -305,42 +315,50 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 			dataPointSet.push_back(SGCPDPointToCVPoint(X[i]));
 		}
 		PointSet keyPoints = findKeyPoints(templatePointSet, dataPointSet);
+		display = new PointsDisplay(keyPoints, 4, true);
+		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 0, 255));
+		display->doDisplay();
+		delete display;
+
 		for (int i = 0; i < keyPoints.size(); i++){
 			keyPoints[i] -= offset;
 		}
 
-		/*for (int i = 0; i < keyPoints.size(); i++){
+#ifdef VERBOSE
+		imwrite("dst_kp.jpg", targetCanvas);
+		for (int i = 0; i < keyPoints.size(); i++){
 			Point p = keyPoints[i] + offset;
 			cout << "(" << p.x << ", " << p.y << ")" << endl;
 			circle(targetCanvas, p, 5, Scalar(0, 0, 255));
 		}
-		imshow("target", targetCanvas); waitKey();*/
-
-		moveSamplePoints(polygon, keyPoints);
-		useCornerPoints(polygon, corners, keyPoints);
-		PointSet& samplePoints = keyPoints;
-		/*PointSet samplePoints = getSamplePoints(polygon, keyPoints);
-		useCornerPoints(polygon, corners, samplePoints);*/
+		imshow("target", targetCanvas); waitKey();
+#endif
+		
+		//PointSet& samplePoints = keyPoints;
+		PointSet& samplePoints = getSamplePoints(polygon, keyPoints, kNumSample);
+		useCornerPoints(polygon, corners, samplePoints);
 
 		// Plot the polygon
 		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
 			samplePoints[i] += offset;
 		}
 		display = new PointsDisplay(samplePoints, 2, true);
-		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 0, 255));
+		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 255, 0));
 		display->doDisplay();
 		delete display;
 		targetCharVert.insert(targetCharVert.end(), samplePoints.begin(), samplePoints.end());
 	}
+#ifdef VERBOSE
+	imwrite("dst.jpg", targetCanvas);
+#endif
 	cout << endl << "There are " << targetCharVert.size() << " points in target character." << endl;
 	display = new MeshDisplay(triMesh, targetCharVert, false);
-	display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(255, 0, 0));
-	display->doDisplay();
-	delete display;
-	display = new MeshDisplay(connectTri, targetCharVert, false);
 	display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 255, 0));
 	display->doDisplay();
 	delete display;
+#ifdef VERBOSE
+	imwrite("dst_tri.jpg", targetCanvas);
+#endif
 }
 
 bool FontMorphing::work(bool toScreen)
@@ -357,18 +375,20 @@ bool FontMorphing::work(bool toScreen)
 	display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(0, 255, 0));
 	display->doDisplay();
 	delete display;
-	imwrite(outputCharDir + "\\" + charName + "_src_mesh.jpg", sourceCanvas);
+	imwrite(outputCharDir + "\\" + charName + "_src_mesh.bmp", sourceCanvas);
 	display = new MeshDisplay(connectTri, targetCharVert, false);
 	display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 255, 0));
 	display->doDisplay();
 	delete display;
-	imwrite(outputCharDir + "\\" + charName + "_dst_mesh.jpg", targetCanvas);
+	imwrite(outputCharDir + "\\" + charName + "_dst_mesh.bmp", targetCanvas);
 	assert(sourceCharVert.size() == targetCharVert.size());
 	ARAPMorphing *morphing = new ARAPMorphing(charName);
 	morphing->setMorphing(sourceCharVert, targetCharVert, triMesh, connectTri);
-	morphing->setDisplay(toScreen, "morphing", Size(max(sourceChar.getCharSize().width, targetChar.getCharSize().width) * 1.1, max(sourceChar.getCharSize().height, targetChar.getCharSize().height) * 1.1));
+	//Size imgSize = Size(max(sourceChar.getCharSize().width, targetChar.getCharSize().width) * 1.2, max(sourceChar.getCharSize().height, targetChar.getCharSize().height) * 1.2);
+	Size imgSize = Size(500, 500);
+	morphing->setDisplay(toScreen, "morphing", imgSize);
 	//morphing->doMorphing(.5f, 0);	// 测试输出特定时刻
-	morphing->doMorphing(-1.f, 5);	// 测试输出过程
+	morphing->doMorphing(-1.f, 4);	// 测试输出过程
 	morphing->doDisplay();
 	delete morphing;
 	return true;
