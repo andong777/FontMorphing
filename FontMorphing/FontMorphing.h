@@ -35,6 +35,6 @@ private:
 public:
 	FontMorphing(string charName);
 	~FontMorphing();
-	bool work(bool toScreen = false);
+	bool work(float ratio, bool toScreen = false);
 
 };

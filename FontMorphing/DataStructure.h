@@ -8,6 +8,8 @@
 namespace FM {
 
 	typedef std::vector<cv::Point> PointSet;
+	typedef std::vector< std::pair<cv::Point, cv::Point> > PointPairSet;
+	typedef std::vector<cv::Point2f> PointSetFloat;
 
 	struct Triangle {
 	public:

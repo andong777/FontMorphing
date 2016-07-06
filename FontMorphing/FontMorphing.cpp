@@ -12,6 +12,8 @@
 #include "MeshDisplay.h"
 #include "CharacterDisplay.h"
 
+float r = 1.;	// 不再需要了
+
 FontMorphing::FontMorphing(string charName)
 {
 	this->charName = charName;
@@ -37,6 +39,7 @@ void FontMorphing::readCharactersData(){
 	f.open(sourceCharPath + charBoxSuffix);
 	if (f){
 		f >> x1 >> y1 >> x2 >> y2;
+		x1 /= r; x2 /= r; y1 /= r; y2 /= r;
 		f.close();
 	}
 	sourceChar.setChar(sourceCharImage, Rect(Point(x1, y1), Point(x2, y2)));
@@ -53,6 +56,7 @@ void FontMorphing::readCharactersData(){
 				oss << sourceCharPath << "_" << i << secondStrokeImageSuffix;
 				strokeImg = imread(oss.str(), CV_LOAD_IMAGE_GRAYSCALE);
 			}
+			x1 /= r; x2 /= r; y1 /= r; y2 /= r;
 			sourceChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
 			i++;
 		}
@@ -67,6 +71,7 @@ void FontMorphing::readCharactersData(){
 	f.open(targetCharPath + charBoxSuffix);
 	if (f){
 		f >> x1 >> y1 >> x2 >> y2;
+		x1 /= r; x2 /= r; y1 /= r; y2 /= r;
 		f.close();
 	}
 	targetChar.setChar(targetCharImage, Rect(Point(x1, y1), Point(x2, y2)));
@@ -83,6 +88,7 @@ void FontMorphing::readCharactersData(){
 				oss << targetCharPath << "_" << i << secondStrokeImageSuffix;
 				strokeImg = imread(oss.str(), CV_LOAD_IMAGE_GRAYSCALE);
 			}
+			x1 /= r; x2 /= r; y1 /= r; y2 /= r;
 			targetChar.addStroke(strokeImg, Rect(Point(x1, y1), Point(x2, y2)));
 			i++;
 		}
@@ -100,6 +106,10 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 
 	int numStroke = sourceChar.getStrokeLength();
 	strokeEndAtVertex.resize(numStroke, 0);
+
+#ifdef PARALLEL_MODE
+#pragma omp parallel for num_threads(4)
+#endif
 	for(int no = 0; no < numStroke; no++){
 		cout << "processing stroke "<<no<<endl;
 		Mat& strokeImg = sourceChar.strokeImage.at(no);
@@ -130,6 +140,7 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 				largerStrokeImgTarget.at<uchar>(i + 5, j + 5) = 255 - strokeImgTarget.at<uchar>(i, j);
 			}
 		}
+
 		PointSet polygonTarget;
 		Mat edgeTarget = getEdge(largerStrokeImgTarget, polygonTarget);
 		PointSet samplePoints = getSamplePoints(polygon, polygonTarget.size());
@@ -138,11 +149,13 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 		for (auto it = corners.begin(); it != corners.end(); it++){
 			(*it) += offset;
 		}
-		/*display = new PointsDisplay(corners, 3);
+		display = new PointsDisplay(corners, 3);
 		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(255, 0, 0));
 		display->doDisplay();
 		delete display;
-		imwrite(charName + "_corners.jpg", sourceCanvas);*/
+#ifdef VERBOSE
+		imwrite(charName + "_corners.jpg", sourceCanvas);
+#endif
 
 		// Plot the polygon
 		for (int i = 0; i < samplePoints.size(); i++){	// large stroke image -> character image
@@ -156,7 +169,7 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 		imwrite("src_kp.jpg", sourceCanvas);
 #endif
 
-		display = new PointsDisplay(samplePoints, 2, true);
+		display = new PointsDisplay(samplePoints, 2, true/*, true*/);
 		display->setDisplay(toScreen, "source", Size(0, 0), sourceCanvas, Scalar(0, 255, 0));
 		display->doDisplay();
 		delete display;
@@ -166,18 +179,24 @@ void FontMorphing::getTemplateFromSourceCharacter(){
 		for (auto it = samplePoints.begin(); it != samplePoints.end(); it++){
 			inputPoints.push_back(CVPointToFade2DPoint(*it));
 		}
+		vector<Triangle2*> outputTriangles;
 		Fade_2D dt;
 		dt.insert(inputPoints);
+		//dt.show("tri.ps");
 		vector<Segment2> segments;
+		//Mat m(Size(1000, 1000), CV_8UC3, Scalar::all(255));
 		for (int i = 0; i < inputPoints.size(); i++){
 			Segment2 seg(inputPoints[i], inputPoints[(i + 1)%inputPoints.size()]);
 			segments.push_back(seg);
+			//line(m, samplePoints[i] * 4, samplePoints[(i + 1) % samplePoints.size()] * 4, Scalar(0, 0, 255), 1);
 		}
+		//imshow("", m); waitKey();
 		ConstraintGraph2* constraint = dt.createConstraint(segments, CIS_IGNORE_DELAUNAY);
+		//assert(constraint->isPolygon());
 		Zone2* zone = dt.createZone(constraint, ZL_INSIDE);
 		dt.applyConstraintsAndZones();
-		vector<Triangle2*> outputTriangles;
 		zone->getTriangles(outputTriangles);
+		//dt.getTrianglePointers(outputTriangles);	// wrong
 		
 		// 更新变量，释放内存等
 		for (auto it = outputTriangles.begin(); it != outputTriangles.end(); it++){
@@ -227,6 +246,10 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 	delete display;
 
 	int numStroke = targetChar.getStrokeLength();
+
+#ifdef PARALLEL_MODE
+#pragma omp parallel for num_threads(4)
+#endif
 	for (int no = 0; no < numStroke; no++){
 		cout << "processing stroke " << no << endl;
 		Point offset = targetChar.getStrokeOffset(no);
@@ -300,7 +323,7 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		outf.close();
 #endif
 #ifdef VERBOSE
-		for (int i = 0; i<Y.size(); i++){
+		for (int i = 0; i < Y.size(); i++){
 			circle(targetCanvas, SGCPDPointToCVPoint(Y[i]), 2, Scalar(255, 0, 0), CV_FILLED);
 		}
 		imshow("target", targetCanvas); waitKey();
@@ -314,7 +337,51 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 		for (int i = 0; i < X.size(); i++){
 			dataPointSet.push_back(SGCPDPointToCVPoint(X[i]));
 		}
-		PointSet keyPoints = findKeyPoints(templatePointSet, dataPointSet);
+
+		display = new PointsDisplay(templatePointSet,2, true);
+		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(255, 0, 0));
+		display->doDisplay();
+		delete display;
+
+		PointSet keyPoints;
+		if (true /*sourceChar.strokeSkeleton.size() == sourceChar.getStrokeLength()*/) {
+			Mat matTemp(targetChar.getCharSize() + Size(10, 10), CV_8UC1, Scalar::all(0));
+			for (int i = 0; i < templatePointSet.size(); i++) {
+				Point& p1 = templatePointSet[i];
+				Point& p2 = templatePointSet[(i + 1) % templatePointSet.size()];
+				line(matTemp, p1, p2, Scalar::all(255), 1);
+			}
+#ifdef VERBOSE
+			//imshow("thinning", matTemp); waitKey();
+#endif
+			Mat filled = fillHoles(matTemp);
+#ifdef VERBOSE
+			//imshow("thinning", filled); waitKey();
+#endif
+			thinning(filled);
+#ifdef VERBOSE
+			//imshow("thinning", filled); waitKey();
+#endif
+			// 由点集注册后的模板点集，得到骨架线，进而获取骨架线段集合。	16.1.14
+			PointPairSet templateSkeleton = getSkeleton(filled);
+
+			// draw
+			for (int i = 0; i < templateSkeleton.size(); i++) {
+				auto seg = templateSkeleton[i];
+				Point p1 = seg.first;
+				Point p2 = seg.second;
+				line(targetCanvas, p1, p2, Scalar(0, 255, 255), 1);
+			}
+			if (toScreen) {
+				imshow("target", targetCanvas); waitKey();
+			}
+
+			keyPoints = findKeyPoints(templatePointSet, dataPointSet, templateSkeleton);
+		}
+		else {
+			keyPoints = findKeyPoints(templatePointSet, dataPointSet);
+		}
+		
 		display = new PointsDisplay(keyPoints, 4, true);
 		display->setDisplay(toScreen, "target", Size(0, 0), targetCanvas, Scalar(0, 0, 255));
 		display->doDisplay();
@@ -326,12 +393,12 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 
 #ifdef VERBOSE
 		imwrite("dst_kp.jpg", targetCanvas);
-		for (int i = 0; i < keyPoints.size(); i++){
+		/*for (int i = 0; i < keyPoints.size(); i++){
 			Point p = keyPoints[i] + offset;
 			cout << "(" << p.x << ", " << p.y << ")" << endl;
 			circle(targetCanvas, p, 5, Scalar(0, 0, 255));
 		}
-		imshow("target", targetCanvas); waitKey();
+		imshow("target", targetCanvas); waitKey();*/
 #endif
 		
 		//PointSet& samplePoints = keyPoints;
@@ -361,11 +428,18 @@ void FontMorphing::registerPointSetToTargetCharacter(){
 #endif
 }
 
-bool FontMorphing::work(bool toScreen)
+bool FontMorphing::work(float ratio, bool toScreen)
 {
 	this->toScreen = toScreen;
 	readCharactersData();
 	assert(sourceChar.getStrokeLength() == targetChar.getStrokeLength());
+
+	// 分辨率自适应
+	double r = 1000 / sourceChar.charImage.size().width;
+	kNumSample = int(kNumSampleStd * r);
+	kNumSample = 15;
+	cout << "Num sample set to " << kNumSample << "." << endl;
+
 	getTemplateFromSourceCharacter();
 	registerPointSetToTargetCharacter();
 	connectTri = getConnectTri(sourceCharVert, targetCharVert, strokeEndAtVertex);
@@ -382,13 +456,18 @@ bool FontMorphing::work(bool toScreen)
 	delete display;
 	imwrite(outputCharDir + "\\" + charName + "_dst_mesh.bmp", targetCanvas);
 	assert(sourceCharVert.size() == targetCharVert.size());
+
 	ARAPMorphing *morphing = new ARAPMorphing(charName);
 	morphing->setMorphing(sourceCharVert, targetCharVert, triMesh, connectTri);
-	//Size imgSize = Size(max(sourceChar.getCharSize().width, targetChar.getCharSize().width) * 1.2, max(sourceChar.getCharSize().height, targetChar.getCharSize().height) * 1.2);
-	Size imgSize = Size(500, 500);
+	Size imgSize = Size(max(sourceChar.getCharSize().width, targetChar.getCharSize().width) * 1.2, max(sourceChar.getCharSize().height, targetChar.getCharSize().height) * 1.2);
+	//Size imgSize = Size(500, 500);
 	morphing->setDisplay(toScreen, "morphing", imgSize);
-	//morphing->doMorphing(.5f, 0);	// 测试输出特定时刻
-	morphing->doMorphing(-1.f, 4);	// 测试输出过程
+
+	if (ratio < 1.f) {
+		morphing->doMorphing(ratio, 0);	// 测试输出特定时刻
+	} else {
+		morphing->doMorphing(-1.f, (int)ratio);	// 测试输出过程
+	}
 	morphing->doDisplay();
 	delete morphing;
 	return true;

@@ -24,6 +24,11 @@ void CharacterImage::addStroke(Mat& image, Rect box)
 	numStroke++;
 }
 
+void CharacterImage::addStrokeSkeleton(PointPairSet& skeleton)
+{
+	strokeSkeleton.push_back(skeleton);
+}
+
 Size CharacterImage::getCharSize()
 {
 	return charBox.size();

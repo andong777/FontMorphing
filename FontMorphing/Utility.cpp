@@ -48,6 +48,106 @@ Mat fillHoles(Mat& imInput){
 	return imFilledHoles;
 }
 
+void deleteDuplicatedPointsOnContour(PointSet& contour) {
+	bool processOnceAgain = true;
+	int loopTimes = 0;
+	while (processOnceAgain & loopTimes < 10) {
+		for (int i = 0; i < contour.size(); i++) {
+			bool toBreak = false;
+			for (int j = i + 1; j < contour.size(); j++) {
+				Point& pi = contour[i];
+				Point& pj = contour[j];
+				int pix = pi.x; int pjx = pj.x;
+				if (i != j && pi == pj) {
+					int ps = 1;
+					bool allEqual = true;
+					while (i + ps < j && j - ps > i && ps < (j - i) / 2) {	// 导致把点全部删除的严重bug，需要如此判断一下。	16.1.15
+						if (contour[i + ps] != contour[j - ps]) {
+							allEqual = false;
+							break;
+						}
+						ps++;
+					}
+					if (allEqual) {
+						// 一条线的轮廓
+						contour.erase(contour.begin() + i, contour.begin() + j);	// 保留一个点pj，保证轮廓还是连续的
+						toBreak = true;
+						break;
+					}
+				}
+			}
+			if (toBreak) {
+				processOnceAgain = true;
+				loopTimes++;
+				break;
+			}
+		}
+		processOnceAgain = false;
+	}
+}
+
+/**
+* Perform one thinning iteration.
+* Normally you wouldn't call this function directly from your code.
+*
+* @param  im    Binary image with range = 0-1
+* @param  iter  0=even, 1=odd
+*/
+void thinningIteration(cv::Mat& im, int iter)
+{
+	cv::Mat marker = cv::Mat::zeros(im.size(), CV_8UC1);
+
+	for (int i = 1; i < im.rows - 1; i++)
+	{
+		for (int j = 1; j < im.cols - 1; j++)
+		{
+			uchar p2 = im.at<uchar>(i - 1, j);
+			uchar p3 = im.at<uchar>(i - 1, j + 1);
+			uchar p4 = im.at<uchar>(i, j + 1);
+			uchar p5 = im.at<uchar>(i + 1, j + 1);
+			uchar p6 = im.at<uchar>(i + 1, j);
+			uchar p7 = im.at<uchar>(i + 1, j - 1);
+			uchar p8 = im.at<uchar>(i, j - 1);
+			uchar p9 = im.at<uchar>(i - 1, j - 1);
+
+			int A = (p2 == 0 && p3 == 1) + (p3 == 0 && p4 == 1) +
+				(p4 == 0 && p5 == 1) + (p5 == 0 && p6 == 1) +
+				(p6 == 0 && p7 == 1) + (p7 == 0 && p8 == 1) +
+				(p8 == 0 && p9 == 1) + (p9 == 0 && p2 == 1);
+			int B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+			int m1 = iter == 0 ? (p2 * p4 * p6) : (p2 * p4 * p8);
+			int m2 = iter == 0 ? (p4 * p6 * p8) : (p2 * p6 * p8);
+
+			if (A == 1 && (B >= 2 && B <= 6) && m1 == 0 && m2 == 0)
+				marker.at<uchar>(i, j) = 1;
+		}
+	}
+
+	im &= ~marker;
+}
+
+/**
+* Function for thinning the given binary image
+*
+* @param  im  Binary image with range = 0-255
+*/
+void thinning(cv::Mat& im)
+{
+	im /= 255;
+
+	cv::Mat prev = cv::Mat::zeros(im.size(), CV_8UC1);
+	cv::Mat diff;
+
+	do {
+		thinningIteration(im, 0);
+		thinningIteration(im, 1);
+		cv::absdiff(im, prev, diff);
+		im.copyTo(prev);
+	} while (cv::countNonZero(diff) > 0);
+
+	im *= 255;
+}
+
 Mat getEdge(Mat& mat, PointSet& contour)
 {
 	Mat filled = fillHoles(mat);
@@ -56,7 +156,7 @@ Mat getEdge(Mat& mat, PointSet& contour)
 	vector<PointSet> contours;
 	vector<Vec4i> hierarchy;
 	findContours(filled, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
-	vector<PointSet> contoursSmoothed(contours.size());
+	//vector<PointSet> contoursSmoothed(contours.size());
 	for (int i = 0; i < contours.size(); i++){
 		//approxPolyDP(contours[i], contoursSmoothed[i], 3, true);
 		drawContours(edge, contours, i, Scalar::all(255), 1);
@@ -75,6 +175,10 @@ Mat getEdge(Mat& mat, PointSet& contour)
 	}
 	contour.insert(contour.end(), contours[idx].begin(), contours[idx].end());
 	//contour.insert(contour.end(), contoursSmoothed[idx].begin(), contoursSmoothed[idx].end());
+
+	// 处理一条线的轮廓
+	deleteDuplicatedPointsOnContour(contour);
+
 #ifdef VERBOSE
 	cout << "There are " << contour.size() << " points on the polygon" << endl;
 	cout << "start point (" << contour[0].x << ", " << contour[0].y << ")" << endl;
@@ -515,11 +619,25 @@ TriMesh getConnectTri(const PointSet& sourcePoints, const PointSet& targetPoints
 	return connectTri;
 }
 
-int APointOnWhichSideOfALineSegment(int x, int y, int xx1, int yy1, int xx2, int yy2)
+bool getIntersection(Point2f o1, Point2f p1, Point2f o2, Point2f p2, Point2f &r)
 {
-	float judge;
-	judge = (float)(y - yy1)*(float)(xx2 - xx1) - (float)(x - xx1)*(float)
-		(yy2 - yy1);
+	Point2f x = o2 - o1;
+	Point2f d1 = p1 - o1;
+	Point2f d2 = p2 - o2;
+
+	float cross = d1.x*d2.y - d1.y*d2.x;
+	if (abs(cross) < /*EPS*/1e-8)
+		return false;
+
+	double t1 = (x.x * d2.y - x.y * d2.x) / cross;
+	r = o1 + d1 * t1;
+	return true;
+}
+
+int APointOnWhichSideOfALineSegment(double x, double y, double xx1, double yy1, double xx2, double yy2)
+{
+	double judge;
+	judge = (double)(y - yy1)*(double)(xx2 - xx1) - (double)(x - xx1)*(double)(yy2 - yy1);
 	if (judge > 1.0) {
 		return 1;
 	}
@@ -529,18 +647,18 @@ int APointOnWhichSideOfALineSegment(int x, int y, int xx1, int yy1, int xx2, int
 	return -1;
 }
 
-bool getIntersectPointOfTwoLineSegments(int x0, int y0, int x1, int y1, int xx1, int yy1, int xx2, int yy2, Point& p_point)
+bool getIntersectPointOfTwoLineSegments(double x0, double y0, double x1, double y1, double xx1, double yy1, double xx2, double yy2, Point2f& p_point)
 {
 	int a0, a1, a2, a3;
 	float a, b, c, d, bb;
 
 	// boundary conditions: if the length of the line is less than 2.
-	if ((abs(xx1 - xx2) < 2) && (abs(yy1 - yy2) < 2)) {
+	/*if ((abs(xx1 - xx2) < 2) && (abs(yy1 - yy2) < 2)) {
 		return false;
 	}
 	if ((abs(x0 - x1) < 2) && (abs(y0 - y1) < 2)) {
 		return false;
-	}
+	}*/
 
 	// judge relationship among points and line segments.
 	a0 = APointOnWhichSideOfALineSegment(x0, y0, xx1, yy1, xx2, yy2);
@@ -557,16 +675,16 @@ bool getIntersectPointOfTwoLineSegments(int x0, int y0, int x1, int y1, int xx1,
 		b = y1 - y0;
 		c = xx2 - xx1;
 		d = yy2 - yy1;
-		bb = b *(float)c - a *(float)d;
-		p_point.x = (int)(0.5 + (a *c *(float)(yy1 - y0) + b *c *(float)x0
-			- a *d *(float)xx1) / bb);
-		p_point.y = (int)(0.5 + (d *b *(float)(x0 - xx1) + b *c *(float)
-			yy1 - d *a *(float)y0) / bb);
+		bb = b *(double)c - a *(double)d;
+		p_point.x = (int)(0.5 + (a *c *(double)(yy1 - y0) + b *c *(double)x0
+			- a *d *(double)xx1) / bb);
+		p_point.y = (int)(0.5 + (d *b *(double)(x0 - xx1) + b *c *(double)
+			yy1 - d *a *(double)y0) / bb);
 
-		if ((p_point.x == x0) && (p_point.y == y0)) {
+		if (abs(p_point.x - x0) < 1e-8 && abs(p_point.y - y0) < 1e-8) {
 			return true;
 		}
-		if ((p_point.x == x1) && (p_point.y == y1)) {
+		if (abs(p_point.x - x1) < 1e-8 && abs(p_point.y - y1) < 1e-8) {
 			return true;
 		}
 		return true;
@@ -576,7 +694,8 @@ bool getIntersectPointOfTwoLineSegments(int x0, int y0, int x1, int y1, int xx1,
 	}
 }
 
-PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPointSet)
+// templateSkeleton用于约束关键点匹配时不穿越模板点集注册后对应笔画的骨架线。	16.1.14
+PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPointSet, const PointPairSet& templateSkeleton)
 {
 	const PointSet& X = dataPointSet, Y = templatePointSet;
 	int **distX2Y = new int*[X.size()];
@@ -587,13 +706,21 @@ PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPoi
 		for (int j = 0; j < Y.size(); j++){
 			Point diff = X[i] - Y[j];
 			distX2Y[i][j] = diff.x * diff.x + diff.y * diff.y;
-			for (int k = 0; k < Y.size(); k++){
-				if (k == j || (k + 1) % Y.size() == j)	continue;
-				Point l0 = Y[k], l1 = Y[(k + 1) % Y.size()];
-				Point crossPnt;
+
+			/*Mat mat(250, 250, CV_8UC1, Scalar::all(255));
+			line(mat, X[i], Y[j], Scalar(0, 0, 0));*/
+			for (int k = 0; k < templateSkeleton.size(); k++){
+				auto seg = templateSkeleton[k];
+				Point l0 = seg.first, l1 = seg.second;
+				/*line(mat, l0, l1, Scalar(0, 0, 0));
+				imshow("", mat); waitKey();*/
+				Point2f crossPnt;
 				bool intersect = getIntersectPointOfTwoLineSegments(X[i].x, X[i].y, Y[j].x, Y[j].y, l0.x, l0.y, l1.x, l1.y, crossPnt);
+				//bool intersect = getIntersection(X[i], Y[j], l0, l1, crossPnt);
 				if (intersect){
-					distX2Y[i][j] = infinity;
+					//distX2Y[i][j] = infinity;
+					distX2Y[i][j] += 10000;	// 有时候因为骨架线不太好，确实可能出现全都穿越骨架线的，总得让它选一个点吧。	16.1.18
+					break;
 				}
 			}
 		}
@@ -601,7 +728,9 @@ PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPoi
 	PointSet keyPoints;
 	int *vertexBelongToTemplate = new int[X.size()];
 	for (int i = 0; i < X.size(); i++)	vertexBelongToTemplate[i] = -1;
-	for (int i = 0; i < Y.size(); i+=kNumSample){	// +=kNumSample表示只匹配关键点，+=1表示匹配所有点
+	//int i = 0, oriI = 0, extraI = 0;
+	int i = 0;
+	while (i < Y.size()) {	// +=kNumSample表示只匹配关键点，+=1表示匹配所有点
 		int minDist = infinity, index = -1;
 		for (int j = 0; j < X.size(); j++){
 			if (vertexBelongToTemplate[j] < 0){	// 尚未确定该点的对应关系
@@ -612,8 +741,19 @@ PointSet findKeyPoints(const PointSet& templatePointSet, const PointSet& dataPoi
 				}
 			}
 		}
+		if (index == -1) {
+			assert(false);	// 不应该出现在这里
+			//oriI = i;
+			//i += 1;
+			//extraI = i - oriI;
+			//if (extraI > 3) {
+			//	i = oriI + kNumSample;
+			//}
+			//continue;
+		}
 		vertexBelongToTemplate[index] = i;
 		keyPoints.push_back(X[index]);
+		i += kNumSample;
 	}
 	delete[] vertexBelongToTemplate;
 	for (int i = 0; i < X.size(); i++){
@@ -647,6 +787,10 @@ PointSet getSamplePoints(const PointSet& polygon, int targetPolygonSize, double 
 		for (int j = 0; j < numSample; j++){
 			int pointIndex = floor(basePosition + sampleStep * j);
 			samplePoints.push_back(polygon[pointIndex]);
+#ifdef VERBOSE
+			Point p = polygon[pointIndex];
+			cout << pointIndex << ": " << p.x << ", " << p.y << endl;
+#endif
 		}
 	}
 	return samplePoints;
@@ -707,12 +851,17 @@ void useCornerPoints(const PointSet& polygon, const PointSet& corners, PointSet&
 				minIdx = j;
 			}
 		}
+		Point bak = points[minIdx];
 		points[minIdx] = (*it);
 		used[minIdx] = true;
+		
 #ifdef VERBOSE
 		cout << "replace corner (" << (*it).x << ", " << (*it).y << ")" << endl;
 #endif
 	}
+	// 删除包含角点可能造成的重复线段，它会导致生成三角网格失败而退出。	16.1.18
+	deleteDuplicatedPointsOnContour(points);
+
 	delete[] used;
 	delete[] pointOrder;
 }
@@ -775,6 +924,53 @@ bool moveSamplePoints(const PointSet& polygon, PointSet& points)
 	return moved;
 }
 
+// mat需要是灰度图，并且骨架为白色
+PointPairSet getSkeleton(const Mat& mat) {
+	PointSet points;
+	for (int i = 0; i < mat.cols; i++) {
+		for (int j = 0; j < mat.rows; j++) {
+			if (mat.at<uchar>(j, i) > 128) {
+				points.push_back(Point(i, j));
+			}
+		}
+	}
+	int n = points.size();
+	if (n == 0) {
+		return PointPairSet();
+	}
+	// 使用最小生成树得到骨架的段
+	vector< pair<Point, Point> > skeleton;
+	PointSet processed;
+	processed.push_back(points[0]);
+	points.erase(points.begin());
+
+	for (int k = 0; k < n - 1; k++) {
+		int processedIdx, pointsIdx;
+		int minDist = infinity;
+		for (int i = 0; i < processed.size(); i++) {
+			bool toBreak = false;
+			for (int j = 0; j < points.size(); j++) {
+				Point& pi = processed[i];
+				Point& pj = points[j];
+				int dist = abs(pi.x - pj.x) + abs(pi.y - pj.y);	// 直接使用L1距离就够了
+				if (dist < minDist) {
+					minDist = dist;
+					processedIdx = i;
+					pointsIdx = j;
+					if (dist == 1) {	// 已经是最小距离，不用继续循环了
+						toBreak = true;
+						break;
+					}
+				}
+			}
+			if (toBreak) { break; }
+		}
+		skeleton.push_back(make_pair(processed[processedIdx], points[pointsIdx]));
+		processed.push_back(points[pointsIdx]);
+		points.erase(points.begin() + pointsIdx);
+	}
+	return skeleton;
+}
 
 /* Customized Union Find Set */
 
@@ -846,4 +1042,10 @@ int UnionFindSet::getChildren(int parent, vector<int>& children)
 		}
 	}
 	return children.size();
+}
+
+bool has_suffix(const std::string &str, const std::string &suffix)
+{
+	return str.size() >= suffix.size() &&
+		str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }

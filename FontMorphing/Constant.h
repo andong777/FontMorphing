@@ -3,14 +3,9 @@
 #include <string>
 #include <limits>
 
-//#define DEMO_MODE
 //#define CPD_FROM_FILE
 //#define VERBOSE
-#define PARALLEL_MODE
-
-#ifdef DEMO_MODE
-#undef PARALLEL_MODE
-#endif
+//#define PARALLEL_MODE
 
 using namespace std;
 
@@ -27,6 +22,9 @@ extern string targetCharDir;
 extern string charListPath;
 extern string outputCharDir;
 
-static const int kCPDIterateTimes = 30;
-static const int kNumSample = 15;
-static const int kKeyPointsInterval = 100;
+static int kCPDIterateTimes = 30;
+static int kNumSampleStd = 5;
+static int kNumSample = 15;
+static int kKeyPointsInterval = 100;
+
+// 300px: 100 15; 1000px: 100 5;
